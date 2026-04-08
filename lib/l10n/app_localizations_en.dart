@@ -1,0 +1,500 @@
+// ignore: unused_import
+import 'package:intl/intl.dart' as intl;
+import 'app_localizations.dart';
+
+// ignore_for_file: type=lint
+
+/// The translations for English (`en`).
+class AppLocalizationsEn extends AppLocalizations {
+  AppLocalizationsEn([String locale = 'en']) : super(locale);
+
+  @override
+  String get appTitle => 'The Remote';
+
+  @override
+  String get homeTitle => 'What matters now';
+
+  @override
+  String get homeTagline =>
+      'We don\'t show you what\'s popular. We show you what\'s worth your time.';
+
+  @override
+  String get sectionTrendingNow => 'Trending Now';
+
+  @override
+  String get sectionTrendingSubtitle => 'Popular and actually good.';
+
+  @override
+  String get sectionExploding => 'Exploding';
+
+  @override
+  String get sectionExplodingSubtitle => 'Gaining momentum fast.';
+
+  @override
+  String get sectionQuickDecision => 'Quick Decision';
+
+  @override
+  String get sectionQuickDecisionSubtitle =>
+      'Short, great, ready to watch tonight.';
+
+  @override
+  String get sectionDontWaste => 'Don\'t Waste Your Time';
+
+  @override
+  String get sectionDontWasteSubtitle =>
+      'High hype, low reward. We\'d skip these.';
+
+  @override
+  String get sectionFiveGems => '5 Gems for you';
+
+  @override
+  String fiveGemsLockedTease(int count) {
+    return '$count more gems waiting for you today';
+  }
+
+  @override
+  String get fiveGemsLockedCta => 'Unlock with Premium';
+
+  @override
+  String get paywallTitle => 'The Remote Premium';
+
+  @override
+  String get paywallSubtitle => 'Decide better, and before everyone else.';
+
+  @override
+  String get paywallFeatureGems => 'All 5 Gems daily + Decision Assistant';
+
+  @override
+  String get paywallFeatureChat => 'Unlimited AI Chat';
+
+  @override
+  String get paywallFeatureFilters => 'Advanced filters (drop-off, trust)';
+
+  @override
+  String get paywallFeatureExploding => 'Early access to Exploding';
+
+  @override
+  String get paywallFeatureQuickTake => 'Write Quick Takes (≤230 chars)';
+
+  @override
+  String get paywallFeatureNoAds => 'No ads';
+
+  @override
+  String get paywallCta => 'Upgrade';
+
+  @override
+  String get paywallLater => 'Not now';
+
+  @override
+  String get discoverTitle => 'Discover';
+
+  @override
+  String get discoverSearchHint => 'Search a movie or show…';
+
+  @override
+  String get discoverFilters => 'Filters';
+
+  @override
+  String get discoverClearFilters => 'Clear';
+
+  @override
+  String get discoverSectionPopularRegion => 'Popular in your region';
+
+  @override
+  String get discoverSectionHiddenGems => 'Hidden gems';
+
+  @override
+  String get discoverSectionUnder90 => 'Under 90 minutes';
+
+  @override
+  String get discoverSectionBingeable => 'Finish this weekend';
+
+  @override
+  String get discoverEmpty => 'Nothing matches those filters.';
+
+  @override
+  String discoverResultsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count results',
+      one: '1 result',
+      zero: 'No results',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get filterGroupGenre => 'Genre';
+
+  @override
+  String get filterGroupPlatform => 'Platform';
+
+  @override
+  String get filterGroupType => 'Type';
+
+  @override
+  String get filterGroupDuration => 'Duration';
+
+  @override
+  String get filterGroupMinScore => 'Min Watcher Score';
+
+  @override
+  String get filterGroupAdvanced => 'Advanced (Premium)';
+
+  @override
+  String get filterTypeMovie => 'Movie';
+
+  @override
+  String get filterTypeSeries => 'Series';
+
+  @override
+  String get filterDurationShort => 'Short (<90m)';
+
+  @override
+  String get filterDurationMedium => 'Medium (90–150m)';
+
+  @override
+  String get filterDurationLong => 'Long (>150m)';
+
+  @override
+  String get filterAdvancedDropoff => 'Low drop-off';
+
+  @override
+  String get filterAdvancedTrust => 'High trust';
+
+  @override
+  String get filterAdvancedConsensus => 'High consensus';
+
+  @override
+  String get filterAdvancedYearRange => 'Year range';
+
+  @override
+  String get filterAdvancedOtherRegions => 'Other regions';
+
+  @override
+  String contentMeta(int year, String platforms) {
+    return '$year · $platforms';
+  }
+
+  @override
+  String contentDurationMin(int minutes) {
+    return '$minutes min';
+  }
+
+  @override
+  String get tabHome => 'Home';
+
+  @override
+  String get tabDiscover => 'Discover';
+
+  @override
+  String get tabAi => 'AI';
+
+  @override
+  String get tabCreators => 'Creators';
+
+  @override
+  String get tabProfile => 'Profile';
+
+  @override
+  String get profileTitle => 'Profile';
+
+  @override
+  String get settingsLanguageSection => 'Language & region';
+
+  @override
+  String get settingsUiLanguage => 'App language';
+
+  @override
+  String get settingsUiLanguageHint =>
+      'The language used across the app interface.';
+
+  @override
+  String get settingsContentLanguage => 'Content language';
+
+  @override
+  String get settingsContentLanguageHint =>
+      'Language used for synopses and reviews when available.';
+
+  @override
+  String get settingsCountry => 'Country';
+
+  @override
+  String get settingsCountryHint =>
+      'Used to show what\'s available on your streaming platforms.';
+
+  @override
+  String get prefAuto => 'Auto (system)';
+
+  @override
+  String get langEnglish => 'English';
+
+  @override
+  String get langSpanish => 'Spanish';
+
+  @override
+  String get countryUs => 'United States';
+
+  @override
+  String get countryMx => 'Mexico';
+
+  @override
+  String get countryEs => 'Spain';
+
+  @override
+  String get countryAr => 'Argentina';
+
+  @override
+  String get countryCo => 'Colombia';
+
+  @override
+  String get countryCl => 'Chile';
+
+  @override
+  String get countryUk => 'United Kingdom';
+
+  @override
+  String get profileSectionAccount => 'Account';
+
+  @override
+  String get profileSectionProfile => 'Profile';
+
+  @override
+  String get profileSectionPreferences => 'Preferences';
+
+  @override
+  String get profileSectionPremium => 'Premium';
+
+  @override
+  String get profileSectionSupport => 'Support';
+
+  @override
+  String get profileSectionLegal => 'Legal';
+
+  @override
+  String get profileSectionAbout => 'About';
+
+  @override
+  String get profileNotSignedIn => 'Not signed in';
+
+  @override
+  String get profileNotSignedInSub =>
+      'Sign in to sync your ratings and takes across devices.';
+
+  @override
+  String get profileSignIn => 'Sign in';
+
+  @override
+  String get profileAlias => 'Alias';
+
+  @override
+  String get profileAliasNotSet => 'Not set yet';
+
+  @override
+  String get profileAliasChange => 'Change alias';
+
+  @override
+  String get profileAliasCooldown => 'You can change your alias every 90 days.';
+
+  @override
+  String get profileTierFree => 'Free';
+
+  @override
+  String get profileTierPro => 'Premium';
+
+  @override
+  String get profileUpgrade => 'Upgrade to Premium';
+
+  @override
+  String get profileManageSubscription => 'Manage subscription';
+
+  @override
+  String get profileHelpCenter => 'Help Center';
+
+  @override
+  String get profileContactUs => 'Contact us';
+
+  @override
+  String get profileSendFeedback => 'Send feedback';
+
+  @override
+  String get profileRateApp => 'Rate The Remote';
+
+  @override
+  String get profileTerms => 'Terms of Service';
+
+  @override
+  String get profilePrivacy => 'Privacy Policy';
+
+  @override
+  String get profileLicenses => 'Open source licenses';
+
+  @override
+  String get profileVersion => 'Version';
+
+  @override
+  String get profileBuild => 'Build';
+
+  @override
+  String get profileComingSoon => 'Coming soon';
+
+  @override
+  String get profileSignOut => 'Sign out';
+
+  @override
+  String get onboardingWelcome => 'Welcome to The Remote';
+
+  @override
+  String get onboardingWelcomeSub =>
+      '30 seconds and we\'ll start finding what\'s worth your time.';
+
+  @override
+  String get onboardingStep1Title => 'Where do you watch from?';
+
+  @override
+  String get onboardingStep1Sub =>
+      'This determines what\'s available on your streaming platforms.';
+
+  @override
+  String get onboardingStep2Title => 'What do you pay for?';
+
+  @override
+  String get onboardingStep2Sub =>
+      'Pick every platform you actually use. We\'ll never recommend something you can\'t watch.';
+
+  @override
+  String get onboardingStep3Title => 'What do you love?';
+
+  @override
+  String get onboardingStep3Sub => 'Pick 3 or more. You can change this later.';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return 'Step $current of $total';
+  }
+
+  @override
+  String get onboardingBack => 'Back';
+
+  @override
+  String get onboardingNext => 'Next';
+
+  @override
+  String get onboardingFinish => 'Start watching';
+
+  @override
+  String get onboardingPlatformsHint => 'Pick at least 1.';
+
+  @override
+  String get onboardingGenresHint => 'Pick at least 3.';
+
+  @override
+  String get genreDrama => 'Drama';
+
+  @override
+  String get genreComedy => 'Comedy';
+
+  @override
+  String get genreThriller => 'Thriller';
+
+  @override
+  String get genreSciFi => 'Sci-Fi';
+
+  @override
+  String get genreRomance => 'Romance';
+
+  @override
+  String get genreAction => 'Action';
+
+  @override
+  String get genreHorror => 'Horror';
+
+  @override
+  String get genreDocumentary => 'Documentary';
+
+  @override
+  String get genreAnimation => 'Animation';
+
+  @override
+  String get genreCrime => 'Crime';
+
+  @override
+  String get genreHistory => 'History';
+
+  @override
+  String get genreMystery => 'Mystery';
+
+  @override
+  String get contentBack => 'Back';
+
+  @override
+  String get contentSectionSignals => 'Signals';
+
+  @override
+  String get contentSectionSynopsis => 'Synopsis';
+
+  @override
+  String get contentSectionFansSay => 'The Remote Fans Say';
+
+  @override
+  String get contentSectionQuickTakes => 'Quick takes';
+
+  @override
+  String get contentSectionAvailable => 'Available on';
+
+  @override
+  String get contentWatcherScore => 'Watcher Score';
+
+  @override
+  String get contentTrustScore => 'Trust';
+
+  @override
+  String get contentVariance => 'Variance';
+
+  @override
+  String get contentCompletion => 'Completion';
+
+  @override
+  String fansSayCompletion(int pct) {
+    return '$pct% finished it';
+  }
+
+  @override
+  String fansSayWorth(int pct) {
+    return '$pct% said worth their time';
+  }
+
+  @override
+  String fansSayRating(String rating) {
+    return '$rating / 5 average';
+  }
+
+  @override
+  String fansSaySample(int count) {
+    return 'n = $count verified watchers';
+  }
+
+  @override
+  String get fansSayNotEnough => 'Not enough verified signal yet.';
+
+  @override
+  String get contentActionRate => 'Rate';
+
+  @override
+  String get contentActionWorth => 'Worth it?';
+
+  @override
+  String get contentActionTake => 'Write a take';
+
+  @override
+  String get contentLoginGate =>
+      'Sign in to rate and share your take. Your signal helps other viewers find joyas.';
+
+  @override
+  String get contentLoginGateCta => 'Sign in later';
+
+  @override
+  String get contentNoTakes =>
+      'No quick takes yet. Be the first verified watcher.';
+}

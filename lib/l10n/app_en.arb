@@ -1,0 +1,205 @@
+{
+  "@@locale": "en",
+  "appTitle": "The Remote",
+
+  "homeTitle": "What matters now",
+  "homeTagline": "We don't show you what's popular. We show you what's worth your time.",
+
+  "sectionTrendingNow": "Trending Now",
+  "sectionTrendingSubtitle": "Popular and actually good.",
+  "sectionExploding": "Exploding",
+  "sectionExplodingSubtitle": "Gaining momentum fast.",
+  "sectionQuickDecision": "Quick Decision",
+  "sectionQuickDecisionSubtitle": "Short, great, ready to watch tonight.",
+  "sectionDontWaste": "Don't Waste Your Time",
+  "sectionDontWasteSubtitle": "High hype, low reward. We'd skip these.",
+  "sectionFiveGems": "5 Gems for you",
+  "fiveGemsLockedTease": "{count} more gems waiting for you today",
+  "@fiveGemsLockedTease": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "fiveGemsLockedCta": "Unlock with Premium",
+  "paywallTitle": "The Remote Premium",
+  "paywallSubtitle": "Decide better, and before everyone else.",
+  "paywallFeatureGems": "All 5 Gems daily + Decision Assistant",
+  "paywallFeatureChat": "Unlimited AI Chat",
+  "paywallFeatureFilters": "Advanced filters (drop-off, trust)",
+  "paywallFeatureExploding": "Early access to Exploding",
+  "paywallFeatureQuickTake": "Write Quick Takes (≤230 chars)",
+  "paywallFeatureNoAds": "No ads",
+  "paywallCta": "Upgrade",
+  "paywallLater": "Not now",
+
+  "discoverTitle": "Discover",
+  "discoverSearchHint": "Search a movie or show…",
+  "discoverFilters": "Filters",
+  "discoverClearFilters": "Clear",
+  "discoverSectionPopularRegion": "Popular in your region",
+  "discoverSectionHiddenGems": "Hidden gems",
+  "discoverSectionUnder90": "Under 90 minutes",
+  "discoverSectionBingeable": "Finish this weekend",
+  "discoverEmpty": "Nothing matches those filters.",
+  "discoverResultsCount": "{count, plural, =0{No results} =1{1 result} other{{count} results}}",
+  "@discoverResultsCount": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "filterGroupGenre": "Genre",
+  "filterGroupPlatform": "Platform",
+  "filterGroupType": "Type",
+  "filterGroupDuration": "Duration",
+  "filterGroupMinScore": "Min Watcher Score",
+  "filterGroupAdvanced": "Advanced (Premium)",
+  "filterTypeMovie": "Movie",
+  "filterTypeSeries": "Series",
+  "filterDurationShort": "Short (<90m)",
+  "filterDurationMedium": "Medium (90–150m)",
+  "filterDurationLong": "Long (>150m)",
+  "filterAdvancedDropoff": "Low drop-off",
+  "filterAdvancedTrust": "High trust",
+  "filterAdvancedConsensus": "High consensus",
+  "filterAdvancedYearRange": "Year range",
+  "filterAdvancedOtherRegions": "Other regions",
+
+  "contentMeta": "{year} · {platforms}",
+  "@contentMeta": {
+    "placeholders": {
+      "year": { "type": "int" },
+      "platforms": { "type": "String" }
+    }
+  },
+  "contentDurationMin": "{minutes} min",
+  "@contentDurationMin": {
+    "placeholders": { "minutes": { "type": "int" } }
+  },
+
+  "tabHome": "Home",
+  "tabDiscover": "Discover",
+  "tabAi": "AI",
+  "tabCreators": "Creators",
+  "tabProfile": "Profile",
+
+  "profileTitle": "Profile",
+  "settingsLanguageSection": "Language & region",
+  "settingsUiLanguage": "App language",
+  "settingsUiLanguageHint": "The language used across the app interface.",
+  "settingsContentLanguage": "Content language",
+  "settingsContentLanguageHint": "Language used for synopses and reviews when available.",
+  "settingsCountry": "Country",
+  "settingsCountryHint": "Used to show what's available on your streaming platforms.",
+
+  "prefAuto": "Auto (system)",
+  "langEnglish": "English",
+  "langSpanish": "Spanish",
+
+  "countryUs": "United States",
+  "countryMx": "Mexico",
+  "countryEs": "Spain",
+  "countryAr": "Argentina",
+  "countryCo": "Colombia",
+  "countryCl": "Chile",
+  "countryUk": "United Kingdom",
+
+  "profileSectionAccount": "Account",
+  "profileSectionProfile": "Profile",
+  "profileSectionPreferences": "Preferences",
+  "profileSectionPremium": "Premium",
+  "profileSectionSupport": "Support",
+  "profileSectionLegal": "Legal",
+  "profileSectionAbout": "About",
+
+  "profileNotSignedIn": "Not signed in",
+  "profileNotSignedInSub": "Sign in to sync your ratings and takes across devices.",
+  "profileSignIn": "Sign in",
+  "profileAlias": "Alias",
+  "profileAliasNotSet": "Not set yet",
+  "profileAliasChange": "Change alias",
+  "profileAliasCooldown": "You can change your alias every 90 days.",
+  "profileTierFree": "Free",
+  "profileTierPro": "Premium",
+  "profileUpgrade": "Upgrade to Premium",
+  "profileManageSubscription": "Manage subscription",
+  "profileHelpCenter": "Help Center",
+  "profileContactUs": "Contact us",
+  "profileSendFeedback": "Send feedback",
+  "profileRateApp": "Rate The Remote",
+  "profileTerms": "Terms of Service",
+  "profilePrivacy": "Privacy Policy",
+  "profileLicenses": "Open source licenses",
+  "profileVersion": "Version",
+  "profileBuild": "Build",
+  "profileComingSoon": "Coming soon",
+  "profileSignOut": "Sign out",
+
+  "onboardingWelcome": "Welcome to The Remote",
+  "onboardingWelcomeSub": "30 seconds and we'll start finding what's worth your time.",
+
+  "onboardingStep1Title": "Where do you watch from?",
+  "onboardingStep1Sub": "This determines what's available on your streaming platforms.",
+  "onboardingStep2Title": "What do you pay for?",
+  "onboardingStep2Sub": "Pick every platform you actually use. We'll never recommend something you can't watch.",
+  "onboardingStep3Title": "What do you love?",
+  "onboardingStep3Sub": "Pick 3 or more. You can change this later.",
+
+  "onboardingStepOf": "Step {current} of {total}",
+  "@onboardingStepOf": {
+    "placeholders": {
+      "current": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "onboardingBack": "Back",
+  "onboardingNext": "Next",
+  "onboardingFinish": "Start watching",
+  "onboardingPlatformsHint": "Pick at least 1.",
+  "onboardingGenresHint": "Pick at least 3.",
+
+  "genreDrama": "Drama",
+  "genreComedy": "Comedy",
+  "genreThriller": "Thriller",
+  "genreSciFi": "Sci-Fi",
+  "genreRomance": "Romance",
+  "genreAction": "Action",
+  "genreHorror": "Horror",
+  "genreDocumentary": "Documentary",
+  "genreAnimation": "Animation",
+  "genreCrime": "Crime",
+  "genreHistory": "History",
+  "genreMystery": "Mystery",
+
+  "contentBack": "Back",
+  "contentSectionSignals": "Signals",
+  "contentSectionSynopsis": "Synopsis",
+  "contentSectionFansSay": "The Remote Fans Say",
+  "contentSectionQuickTakes": "Quick takes",
+  "contentSectionAvailable": "Available on",
+
+  "contentWatcherScore": "Watcher Score",
+  "contentTrustScore": "Trust",
+  "contentVariance": "Variance",
+  "contentCompletion": "Completion",
+
+  "fansSayCompletion": "{pct}% finished it",
+  "@fansSayCompletion": {
+    "placeholders": { "pct": { "type": "int" } }
+  },
+  "fansSayWorth": "{pct}% said worth their time",
+  "@fansSayWorth": {
+    "placeholders": { "pct": { "type": "int" } }
+  },
+  "fansSayRating": "{rating} / 5 average",
+  "@fansSayRating": {
+    "placeholders": { "rating": { "type": "String" } }
+  },
+  "fansSaySample": "n = {count} verified watchers",
+  "@fansSaySample": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "fansSayNotEnough": "Not enough verified signal yet.",
+
+  "contentActionRate": "Rate",
+  "contentActionWorth": "Worth it?",
+  "contentActionTake": "Write a take",
+  "contentLoginGate": "Sign in to rate and share your take. Your signal helps other viewers find joyas.",
+  "contentLoginGateCta": "Sign in later",
+  "contentNoTakes": "No quick takes yet. Be the first verified watcher."
+}
