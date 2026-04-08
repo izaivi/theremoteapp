@@ -115,6 +115,51 @@
   "profileComingSoon": "Próximamente",
   "profileSignOut": "Cerrar sesión",
 
+  "creatorsTitle": "Creadores",
+  "creatorsTagline": "Voces de confianza. Opiniones reales. Sin algoritmos.",
+  "creatorsFeaturedSkip": "NO vale tu tiempo",
+  "creatorsSectionAll": "Todos los creadores",
+  "creatorsSectionLatest": "Últimas opiniones",
+  "creatorsCurated": "Curado",
+  "creatorsFollow": "Seguir",
+  "creatorsFollowing": "Siguiendo",
+  "creatorsFollowersCount": "{count} seguidores",
+  "@creatorsFollowersCount": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "creatorVerdictWorthIt": "Vale la pena",
+  "creatorVerdictSkipIt": "Sáltatelo",
+  "creatorVerdictQuickTake": "Opinión rápida",
+  "creatorActionWatch": "Ver",
+  "creatorActionSave": "Guardar",
+  "creatorActionHelpful": "Útil",
+  "creatorActionNotHelpful": "No útil",
+  "creatorDetailTakes": "Opiniones",
+  "creatorTakeSaved": "Guardado en tu lista",
+  "creatorTakeHelpfulRecorded": "Gracias por tu señal",
+
+  "splashTagline": "Toma el control",
+  "splashSubtitle": "No te mostramos lo popular.\nTe mostramos lo que vale tu tiempo.",
+  "splashCta": "Comenzar",
+
+  "chatTitle": "Chat IA",
+  "chatTagline": "Pregúntame qué ver esta noche.",
+  "chatInputHint": "¿Qué te provoca ver?",
+  "chatSend": "Enviar",
+  "chatEmptyTitle": "Tu asistente de decisión",
+  "chatEmptyBody": "Prueba: \"algo corto para esta noche\", \"una serie prestige\" o \"qué me salto\".",
+  "chatQuickShort": "Corto esta noche",
+  "chatQuickBinge": "Binge este fin",
+  "chatQuickSad": "Algo emocional",
+  "chatQuickSkip": "¿Qué me salto?",
+  "chatQuotaRemaining": "{count, plural, =0{Sin preguntas restantes hoy} =1{1 pregunta restante hoy} other{{count} preguntas restantes hoy}}",
+  "@chatQuotaRemaining": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "chatQuotaPro": "Ilimitado",
+  "chatQuotaExhaustedTitle": "Usaste tus 5 preguntas gratis de hoy",
+  "chatQuotaExhaustedBody": "Actualiza a Premium para chat IA ilimitado y el Decision Assistant.",
+
   "onboardingWelcome": "Bienvenido a The Remote",
   "onboardingWelcomeSub": "30 segundos y empezamos a encontrar lo que vale tu tiempo.",
 

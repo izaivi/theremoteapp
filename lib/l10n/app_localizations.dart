@@ -722,6 +722,222 @@ abstract class AppLocalizations {
   /// **'Sign out'**
   String get profileSignOut;
 
+  /// No description provided for @creatorsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Creators'**
+  String get creatorsTitle;
+
+  /// No description provided for @creatorsTagline.
+  ///
+  /// In en, this message translates to:
+  /// **'Trusted voices. Real takes. No algorithms.'**
+  String get creatorsTagline;
+
+  /// No description provided for @creatorsFeaturedSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'NOT worth your time'**
+  String get creatorsFeaturedSkip;
+
+  /// No description provided for @creatorsSectionAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All creators'**
+  String get creatorsSectionAll;
+
+  /// No description provided for @creatorsSectionLatest.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest takes'**
+  String get creatorsSectionLatest;
+
+  /// No description provided for @creatorsCurated.
+  ///
+  /// In en, this message translates to:
+  /// **'Curated'**
+  String get creatorsCurated;
+
+  /// No description provided for @creatorsFollow.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow'**
+  String get creatorsFollow;
+
+  /// No description provided for @creatorsFollowing.
+  ///
+  /// In en, this message translates to:
+  /// **'Following'**
+  String get creatorsFollowing;
+
+  /// No description provided for @creatorsFollowersCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} followers'**
+  String creatorsFollowersCount(int count);
+
+  /// No description provided for @creatorVerdictWorthIt.
+  ///
+  /// In en, this message translates to:
+  /// **'Worth it'**
+  String get creatorVerdictWorthIt;
+
+  /// No description provided for @creatorVerdictSkipIt.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip it'**
+  String get creatorVerdictSkipIt;
+
+  /// No description provided for @creatorVerdictQuickTake.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick take'**
+  String get creatorVerdictQuickTake;
+
+  /// No description provided for @creatorActionWatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Watch'**
+  String get creatorActionWatch;
+
+  /// No description provided for @creatorActionSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get creatorActionSave;
+
+  /// No description provided for @creatorActionHelpful.
+  ///
+  /// In en, this message translates to:
+  /// **'Helpful'**
+  String get creatorActionHelpful;
+
+  /// No description provided for @creatorActionNotHelpful.
+  ///
+  /// In en, this message translates to:
+  /// **'Not helpful'**
+  String get creatorActionNotHelpful;
+
+  /// No description provided for @creatorDetailTakes.
+  ///
+  /// In en, this message translates to:
+  /// **'Takes'**
+  String get creatorDetailTakes;
+
+  /// No description provided for @creatorTakeSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to your list'**
+  String get creatorTakeSaved;
+
+  /// No description provided for @creatorTakeHelpfulRecorded.
+  ///
+  /// In en, this message translates to:
+  /// **'Thanks for the signal'**
+  String get creatorTakeHelpfulRecorded;
+
+  /// No description provided for @splashTagline.
+  ///
+  /// In en, this message translates to:
+  /// **'Take control'**
+  String get splashTagline;
+
+  /// No description provided for @splashSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'We don\'t show you what\'s popular.\nWe show you what\'s worth your time.'**
+  String get splashSubtitle;
+
+  /// No description provided for @splashCta.
+  ///
+  /// In en, this message translates to:
+  /// **'Start'**
+  String get splashCta;
+
+  /// No description provided for @chatTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'AI Chat'**
+  String get chatTitle;
+
+  /// No description provided for @chatTagline.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask me what to watch tonight.'**
+  String get chatTagline;
+
+  /// No description provided for @chatInputHint.
+  ///
+  /// In en, this message translates to:
+  /// **'What are you in the mood for?'**
+  String get chatInputHint;
+
+  /// No description provided for @chatSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get chatSend;
+
+  /// No description provided for @chatEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your watch assistant'**
+  String get chatEmptyTitle;
+
+  /// No description provided for @chatEmptyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Try: \"something short tonight\", \"a prestige series\", or \"what should I skip?\".'**
+  String get chatEmptyBody;
+
+  /// No description provided for @chatQuickShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Short tonight'**
+  String get chatQuickShort;
+
+  /// No description provided for @chatQuickBinge.
+  ///
+  /// In en, this message translates to:
+  /// **'Binge this weekend'**
+  String get chatQuickBinge;
+
+  /// No description provided for @chatQuickSad.
+  ///
+  /// In en, this message translates to:
+  /// **'Something emotional'**
+  String get chatQuickSad;
+
+  /// No description provided for @chatQuickSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'What should I skip?'**
+  String get chatQuickSkip;
+
+  /// No description provided for @chatQuotaRemaining.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{No questions left today} =1{1 question left today} other{{count} questions left today}}'**
+  String chatQuotaRemaining(int count);
+
+  /// No description provided for @chatQuotaPro.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited'**
+  String get chatQuotaPro;
+
+  /// No description provided for @chatQuotaExhaustedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'You’ve used your 5 free questions today'**
+  String get chatQuotaExhaustedTitle;
+
+  /// No description provided for @chatQuotaExhaustedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade to Premium for unlimited AI chat and Decision Assistant.'**
+  String get chatQuotaExhaustedBody;
+
   /// No description provided for @onboardingWelcome.
   ///
   /// In en, this message translates to:

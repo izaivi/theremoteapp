@@ -6,11 +6,13 @@ import '../../data/models/user_profile.dart';
 import '../../data/repositories/user_profile_repository.dart';
 import '../../presentation/screens/chat/chat_screen.dart';
 import '../../presentation/screens/content/content_screen.dart';
+import '../../presentation/screens/creators/creator_detail_screen.dart';
 import '../../presentation/screens/creators/creators_screen.dart';
 import '../../presentation/screens/discover/discover_screen.dart';
 import '../../presentation/screens/home/home_screen.dart';
 import '../../presentation/screens/onboarding/onboarding_screen.dart';
 import '../../presentation/screens/profile/profile_screen.dart';
+import '../../presentation/screens/splash/splash_screen.dart';
 import '../../presentation/widgets/main_scaffold.dart';
 
 /// Router as a Riverpod provider so redirects can react to profile changes.
@@ -29,18 +31,26 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   );
 
   return GoRouter(
-    initialLocation: '/home',
+    initialLocation: '/splash',
     refreshListenable: refresh,
     redirect: (context, state) {
       final profile = ref.read(userProfileProvider);
-      final atOnboarding = state.matchedLocation == '/onboarding';
+      final loc = state.matchedLocation;
+      final atOnboarding = loc == '/onboarding';
+      final atSplash = loc == '/splash';
       final done = profile.quizCompletion != QuizCompletion.none;
 
+      // Splash is always allowed — it's the welcome gate.
+      if (atSplash) return null;
       if (!done && !atOnboarding) return '/onboarding';
       if (done && atOnboarding) return '/home';
       return null;
     },
     routes: [
+      GoRoute(
+        path: '/splash',
+        builder: (_, __) => const SplashScreen(),
+      ),
       GoRoute(
         path: '/onboarding',
         builder: (_, __) => const OnboardingScreen(),
@@ -61,6 +71,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/content/:id',
         builder: (_, state) =>
             ContentScreen(contentId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/creator/:id',
+        builder: (_, state) =>
+            CreatorDetailScreen(creatorId: state.pathParameters['id']!),
       ),
     ],
   );

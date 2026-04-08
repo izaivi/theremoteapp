@@ -343,6 +343,129 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileSignOut => 'Sign out';
 
   @override
+  String get creatorsTitle => 'Creators';
+
+  @override
+  String get creatorsTagline => 'Trusted voices. Real takes. No algorithms.';
+
+  @override
+  String get creatorsFeaturedSkip => 'NOT worth your time';
+
+  @override
+  String get creatorsSectionAll => 'All creators';
+
+  @override
+  String get creatorsSectionLatest => 'Latest takes';
+
+  @override
+  String get creatorsCurated => 'Curated';
+
+  @override
+  String get creatorsFollow => 'Follow';
+
+  @override
+  String get creatorsFollowing => 'Following';
+
+  @override
+  String creatorsFollowersCount(int count) {
+    return '$count followers';
+  }
+
+  @override
+  String get creatorVerdictWorthIt => 'Worth it';
+
+  @override
+  String get creatorVerdictSkipIt => 'Skip it';
+
+  @override
+  String get creatorVerdictQuickTake => 'Quick take';
+
+  @override
+  String get creatorActionWatch => 'Watch';
+
+  @override
+  String get creatorActionSave => 'Save';
+
+  @override
+  String get creatorActionHelpful => 'Helpful';
+
+  @override
+  String get creatorActionNotHelpful => 'Not helpful';
+
+  @override
+  String get creatorDetailTakes => 'Takes';
+
+  @override
+  String get creatorTakeSaved => 'Saved to your list';
+
+  @override
+  String get creatorTakeHelpfulRecorded => 'Thanks for the signal';
+
+  @override
+  String get splashTagline => 'Take control';
+
+  @override
+  String get splashSubtitle =>
+      'We don\'t show you what\'s popular.\nWe show you what\'s worth your time.';
+
+  @override
+  String get splashCta => 'Start';
+
+  @override
+  String get chatTitle => 'AI Chat';
+
+  @override
+  String get chatTagline => 'Ask me what to watch tonight.';
+
+  @override
+  String get chatInputHint => 'What are you in the mood for?';
+
+  @override
+  String get chatSend => 'Send';
+
+  @override
+  String get chatEmptyTitle => 'Your watch assistant';
+
+  @override
+  String get chatEmptyBody =>
+      'Try: \"something short tonight\", \"a prestige series\", or \"what should I skip?\".';
+
+  @override
+  String get chatQuickShort => 'Short tonight';
+
+  @override
+  String get chatQuickBinge => 'Binge this weekend';
+
+  @override
+  String get chatQuickSad => 'Something emotional';
+
+  @override
+  String get chatQuickSkip => 'What should I skip?';
+
+  @override
+  String chatQuotaRemaining(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count questions left today',
+      one: '1 question left today',
+      zero: 'No questions left today',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get chatQuotaPro => 'Unlimited';
+
+  @override
+  String get chatQuotaExhaustedTitle =>
+      'You’ve used your 5 free questions today';
+
+  @override
+  String get chatQuotaExhaustedBody =>
+      'Upgrade to Premium for unlimited AI chat and Decision Assistant.';
+
+  @override
   String get onboardingWelcome => 'Welcome to The Remote';
 
   @override

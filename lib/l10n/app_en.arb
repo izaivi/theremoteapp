@@ -130,6 +130,51 @@
   "profileComingSoon": "Coming soon",
   "profileSignOut": "Sign out",
 
+  "creatorsTitle": "Creators",
+  "creatorsTagline": "Trusted voices. Real takes. No algorithms.",
+  "creatorsFeaturedSkip": "NOT worth your time",
+  "creatorsSectionAll": "All creators",
+  "creatorsSectionLatest": "Latest takes",
+  "creatorsCurated": "Curated",
+  "creatorsFollow": "Follow",
+  "creatorsFollowing": "Following",
+  "creatorsFollowersCount": "{count} followers",
+  "@creatorsFollowersCount": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "creatorVerdictWorthIt": "Worth it",
+  "creatorVerdictSkipIt": "Skip it",
+  "creatorVerdictQuickTake": "Quick take",
+  "creatorActionWatch": "Watch",
+  "creatorActionSave": "Save",
+  "creatorActionHelpful": "Helpful",
+  "creatorActionNotHelpful": "Not helpful",
+  "creatorDetailTakes": "Takes",
+  "creatorTakeSaved": "Saved to your list",
+  "creatorTakeHelpfulRecorded": "Thanks for the signal",
+
+  "splashTagline": "Take control",
+  "splashSubtitle": "We don't show you what's popular.\nWe show you what's worth your time.",
+  "splashCta": "Start",
+
+  "chatTitle": "AI Chat",
+  "chatTagline": "Ask me what to watch tonight.",
+  "chatInputHint": "What are you in the mood for?",
+  "chatSend": "Send",
+  "chatEmptyTitle": "Your watch assistant",
+  "chatEmptyBody": "Try: \"something short tonight\", \"a prestige series\", or \"what should I skip?\".",
+  "chatQuickShort": "Short tonight",
+  "chatQuickBinge": "Binge this weekend",
+  "chatQuickSad": "Something emotional",
+  "chatQuickSkip": "What should I skip?",
+  "chatQuotaRemaining": "{count, plural, =0{No questions left today} =1{1 question left today} other{{count} questions left today}}",
+  "@chatQuotaRemaining": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "chatQuotaPro": "Unlimited",
+  "chatQuotaExhaustedTitle": "You\u2019ve used your 5 free questions today",
+  "chatQuotaExhaustedBody": "Upgrade to Premium for unlimited AI chat and Decision Assistant.",
+
   "onboardingWelcome": "Welcome to The Remote",
   "onboardingWelcomeSub": "30 seconds and we'll start finding what's worth your time.",
 
