@@ -1,0 +1,43 @@
+# Flixscope — Manual seed titles
+# Format: movie:<tmdb_id> or tv:<tmdb_id>
+# Run: python ingest.py --tmdb-ids "$(grep -v '^#' seed_titles.txt | grep -v '^$' | tr '\n' ',')" --skip-watchmode --skip-rapidapi
+#
+# ── Blade Runner ──────────────────────────────────────────────
+# Blade Runner (1982)
+movie:78
+# Blade Runner 2049 (2017)
+movie:335984
+
+# ── Twilight Saga (completa) ──────────────────────────────────
+# Twilight (2008)
+movie:8966
+# New Moon (2009)
+movie:18239
+# Eclipse (2010)
+movie:24021
+# Breaking Dawn Part 1 (2011)
+movie:50619
+# Breaking Dawn Part 2 (2012)
+movie:50620
+
+# ── Denis Villeneuve ──────────────────────────────────────────
+# Dune (2021)
+movie:438631
+# Dune: Part Two (2024)
+movie:693134
+# Arrival (2016)
+movie:329865
+# Sicario (2015)
+movie:273481
+# Prisoners (2013)
+movie:146233
+
+# ── Christopher Nolan ─────────────────────────────────────────
+# Interstellar (2014)
+movie:157336
+# Inception (2010)
+movie:27205
+# The Dark Knight (2008)
+movie:155
+# Memento (2000)
+movie:77

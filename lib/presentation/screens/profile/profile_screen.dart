@@ -1,10 +1,22 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+
+import 'package:go_router/go_router.dart';
 
 import '../../../core/prefs/language_prefs.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../data/models/user_profile.dart';
+import '../../../data/repositories/auth_repository.dart';
+import '../../../data/repositories/supabase_sync.dart';
 import '../../../data/repositories/user_profile_repository.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../widgets/paywall_sheet.dart';
+import '../../widgets/user_avatar.dart';
 
 /// Profile / Settings screen.
 ///
@@ -40,23 +52,83 @@ class ProfileScreen extends ConsumerWidget {
       );
     }
 
-    return SafeArea(
+    Future<void> pickAndSaveAvatar() async {
+      try {
+        final picker = ImagePicker();
+        final picked = await picker.pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 1024,
+          maxHeight: 1024,
+          imageQuality: 92,
+        );
+        if (picked == null) return;
+        // Copy to the app's documents dir so it survives across relaunches
+        // (the picker returns a path in a temp cache that iOS may purge).
+        final docsDir = await getApplicationDocumentsDirectory();
+        final avatarsDir = Directory('${docsDir.path}/avatars');
+        if (!await avatarsDir.exists()) {
+          await avatarsDir.create(recursive: true);
+        }
+        final ext = picked.path.contains('.')
+            ? picked.path.substring(picked.path.lastIndexOf('.'))
+            : '.jpg';
+        final destPath =
+            '${avatarsDir.path}/user_${DateTime.now().millisecondsSinceEpoch}$ext';
+        await File(picked.path).copy(destPath);
+        ref
+            .read(userProfileProvider.notifier)
+            .setAvatar('file:$destPath');
+      } catch (_) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(l10n.profileComingSoon),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.settingsTitle),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/home'),
+        ),
+      ),
+      body: SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
         children: [
-          Text(
-            l10n.profileTitle,
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          const SizedBox(height: 20),
 
           // ---------------- Account ----------------
           _AccountCard(
             isSignedIn: isSignedIn,
             alias: profile.alias,
-            onSignIn: comingSoon,
+            avatarKey: profile.avatarKey,
+            onSignIn: () => context.push('/auth'),
+          ),
+          const SizedBox(height: 14),
+
+          // ---------------- Avatar picker ----------------
+          _AvatarPickerCard(
+            currentKey: profile.avatarKey,
+            seed: profile.alias ?? l10n.settingsTitle,
+            onSelect: (key) =>
+                ref.read(userProfileProvider.notifier).setAvatar(key),
+            onUpload: () {
+              pickAndSaveAvatar();
+            },
+          ),
+          const SizedBox(height: 14),
+
+          // ---------------- Profile strength ----------------
+          _ProfileStrengthCard(
+            completed: profile.quizCompletion == QuizCompletion.long,
           ),
           const SizedBox(height: 24),
 
@@ -72,7 +144,27 @@ class ProfileScreen extends ConsumerWidget {
               icon: Icons.edit_outlined,
               title: l10n.profileAliasChange,
               subtitle: l10n.profileAliasCooldown,
-              onTap: comingSoon,
+              onTap: () async {
+                final newAlias = await showDialog<String>(
+                  context: context,
+                  builder: (_) => _AliasDialog(current: profile.alias),
+                );
+                if (newAlias != null && newAlias.isNotEmpty) {
+                  try {
+                    await ref
+                        .read(userProfileProvider.notifier)
+                        .setAlias(newAlias);
+                  } on AliasTakenException {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Ese alias ya está en uso.'),
+                        ),
+                      );
+                    }
+                  }
+                }
+              },
             ),
           ]),
           const SizedBox(height: 24),
@@ -109,12 +201,22 @@ class ProfileScreen extends ConsumerWidget {
               items: [
                 _Opt(null, l10n.prefAuto),
                 _Opt('US', l10n.countryUs),
+                _Opt('CA', l10n.countryCa),
                 _Opt('MX', l10n.countryMx),
-                _Opt('ES', l10n.countryEs),
+                _Opt('BR', l10n.countryBr),
                 _Opt('AR', l10n.countryAr),
                 _Opt('CO', l10n.countryCo),
                 _Opt('CL', l10n.countryCl),
+                _Opt('ES', l10n.countryEs),
                 _Opt('GB', l10n.countryUk),
+                _Opt('IE', l10n.countryIe),
+                _Opt('FR', l10n.countryFr),
+                _Opt('DE', l10n.countryDe),
+                _Opt('IT', l10n.countryIt),
+                _Opt('NL', l10n.countryNl),
+                _Opt('PT', l10n.countryPt),
+                _Opt('SE', l10n.countrySe),
+                _Opt('XX', l10n.countryOther),
               ],
               onChanged: langCtrl.setCountry,
             ),
@@ -210,6 +312,44 @@ class ProfileScreen extends ConsumerWidget {
           ]),
           const SizedBox(height: 24),
 
+          // ---------------- Session ----------------
+          if (isSignedIn) ...[
+            _Group(children: [
+              _Row(
+                icon: Icons.logout,
+                title: 'Sign out',
+                onTap: () async {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: const Text('Sign out?'),
+                      content: const Text(
+                          'Your local data stays on this device. Sign in again to sync.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Sign out'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (ok == true) {
+                    await ref.read(authRepositoryProvider).signOut();
+                    // Clear the local profile so the UI shows "not signed in"
+                    // and the user can pick a different provider.
+                    await ref.read(userProfileProvider.notifier).reset();
+                    if (context.mounted) context.go('/home');
+                  }
+                },
+              ),
+            ]),
+            const SizedBox(height: 24),
+          ],
+
           // ---------------- About ----------------
           _SectionHeader(l10n.profileSectionAbout),
           _Group(children: [
@@ -223,7 +363,7 @@ class ProfileScreen extends ConsumerWidget {
           const SizedBox(height: 32),
           Center(
             child: Text(
-              'The Remote · $_appVersion',
+              'Flixscope · $_appVersion',
               style: TextStyle(
                 fontSize: 12,
                 color: Theme.of(context).textTheme.bodySmall?.color,
@@ -231,6 +371,7 @@ class ProfileScreen extends ConsumerWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -446,11 +587,13 @@ class _DropdownRow<T> extends StatelessWidget {
 class _AccountCard extends StatelessWidget {
   final bool isSignedIn;
   final String? alias;
+  final String? avatarKey;
   final VoidCallback onSignIn;
 
   const _AccountCard({
     required this.isSignedIn,
     required this.alias,
+    required this.avatarKey,
     required this.onSignIn,
   });
 
@@ -475,20 +618,11 @@ class _AccountCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: primary.withOpacity(0.25),
-              border: Border.all(color: primary, width: 1.5),
-            ),
-            alignment: Alignment.center,
-            child: Icon(
-              isSignedIn ? Icons.person : Icons.person_outline,
-              color: primary,
-              size: 28,
-            ),
+          UserAvatar(
+            avatarKey: avatarKey,
+            seed: alias ?? 'Flixscope',
+            size: 56,
+            withBorder: true,
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -532,6 +666,394 @@ class _AccountCard extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Profile strength card (Fast vs Long quiz)
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Avatar picker — initials fallback + 5 bundled defaults + upload (stubbed).
+// The 5 bundled avatars live in `assets/avatars/avatar_1.png` .. `avatar_5.png`.
+// If the PNGs are missing, [UserAvatar] degrades to initials gracefully, so
+// this picker is safe to ship before the art assets land.
+// ---------------------------------------------------------------------------
+
+class _AvatarPickerCard extends StatelessWidget {
+  final String? currentKey;
+  final String seed;
+  final ValueChanged<String?> onSelect;
+  final VoidCallback onUpload;
+
+  const _AvatarPickerCard({
+    required this.currentKey,
+    required this.seed,
+    required this.onSelect,
+    required this.onUpload,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    // Options: null (initials), default:1..5, and an "upload" action tile.
+    final options = <String?>[null, 'default:1', 'default:2', 'default:3',
+      'default:4', 'default:5'];
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l10n.settingsAvatarTitle,
+            style:
+                const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            l10n.settingsAvatarHint,
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).textTheme.bodySmall?.color,
+            ),
+          ),
+          const SizedBox(height: 14),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final opt in options)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: _AvatarChoice(
+                      avatarKey: opt,
+                      seed: seed,
+                      selected: currentKey == opt,
+                      onTap: () => onSelect(opt),
+                    ),
+                  ),
+                // Upload action tile (stub — will wire image_picker later)
+                _UploadTile(onTap: onUpload),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AvatarChoice extends StatelessWidget {
+  final String? avatarKey;
+  final String seed;
+  final bool selected;
+  final VoidCallback onTap;
+  const _AvatarChoice({
+    required this.avatarKey,
+    required this.seed,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(32),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: selected ? AppColors.accent : Colors.transparent,
+            width: 2.5,
+          ),
+        ),
+        child: UserAvatar(
+          avatarKey: avatarKey,
+          seed: seed,
+          size: 56,
+        ),
+      ),
+    );
+  }
+}
+
+class _UploadTile extends StatelessWidget {
+  final VoidCallback onTap;
+  const _UploadTile({required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(32),
+      child: Container(
+        margin: const EdgeInsets.all(3),
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white.withOpacity(0.04),
+          border: Border.all(
+            color: AppColors.accent.withOpacity(0.5),
+            width: 1.4,
+          ),
+        ),
+        child: const Icon(Icons.add_a_photo_outlined,
+            size: 22, color: AppColors.accent),
+      ),
+    );
+  }
+}
+
+class _ProfileStrengthCard extends StatelessWidget {
+  final bool completed;
+  const _ProfileStrengthCard({required this.completed});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return GestureDetector(
+      onTap: completed ? null : () => context.push('/long-quiz'),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: Theme.of(context).colorScheme.surface,
+          border: Border.all(
+            color: completed
+                ? AppColors.accent.withOpacity(0.5)
+                : Colors.white.withOpacity(0.1),
+          ),
+          gradient: completed
+              ? LinearGradient(
+                  colors: [
+                    AppColors.accent.withOpacity(0.18),
+                    Theme.of(context).colorScheme.surface,
+                  ],
+                )
+              : null,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: completed
+                    ? AppColors.accent.withOpacity(0.2)
+                    : Colors.white.withOpacity(0.06),
+                border: Border.all(
+                  color: completed
+                      ? AppColors.accent
+                      : Colors.white.withOpacity(0.15),
+                ),
+              ),
+              child: Icon(
+                completed ? Icons.auto_awesome : Icons.tune,
+                color: completed ? AppColors.accent : Colors.white70,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    completed
+                        ? l10n.profileStrengthLong
+                        : l10n.profileStrengthFast,
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    completed
+                        ? l10n.profileStrengthCtaDone
+                        : l10n.profileStrengthHint,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).textTheme.bodySmall?.color,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (!completed)
+              const Icon(Icons.chevron_right, color: Colors.white54),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+enum _AliasStatus { idle, checking, available, taken, formatError }
+
+class _AliasDialog extends ConsumerStatefulWidget {
+  final String? current;
+  const _AliasDialog({this.current});
+
+  @override
+  ConsumerState<_AliasDialog> createState() => _AliasDialogState();
+}
+
+class _AliasDialogState extends ConsumerState<_AliasDialog> {
+  late final TextEditingController _ctrl =
+      TextEditingController(text: widget.current ?? '');
+  _AliasStatus _status = _AliasStatus.idle;
+  String? _error;
+  Timer? _debounce;
+  int _reqSeq = 0;
+
+  static final _re = RegExp(r'^[a-zA-Z0-9_]+$');
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl.addListener(_onChanged);
+  }
+
+  void _onChanged() {
+    _debounce?.cancel();
+    final v = _ctrl.text.trim();
+
+    // Empty or same as current → idle.
+    if (v.isEmpty || v == (widget.current ?? '')) {
+      setState(() {
+        _status = _AliasStatus.idle;
+        _error = null;
+      });
+      return;
+    }
+    // Format errors surface immediately, no network call.
+    if (v.length < 3 || v.length > 24) {
+      setState(() {
+        _status = _AliasStatus.formatError;
+        _error = 'Must be 3–24 characters.';
+      });
+      return;
+    }
+    if (!_re.hasMatch(v)) {
+      setState(() {
+        _status = _AliasStatus.formatError;
+        _error = 'Letters, numbers, and _ only.';
+      });
+      return;
+    }
+
+    setState(() {
+      _status = _AliasStatus.checking;
+      _error = null;
+    });
+
+    final seq = ++_reqSeq;
+    _debounce = Timer(const Duration(milliseconds: 400), () async {
+      final sync = ref.read(supabaseSyncProvider);
+      final available = await sync.isAliasAvailable(v);
+      // Ignore stale responses if the user kept typing.
+      if (!mounted || seq != _reqSeq) return;
+      setState(() {
+        _status =
+            available ? _AliasStatus.available : _AliasStatus.taken;
+        _error = available ? null : 'Ese alias ya está en uso.';
+      });
+    });
+  }
+
+  void _save() {
+    final v = _ctrl.text.trim();
+    if (v.length < 3 || v.length > 24) {
+      setState(() {
+        _status = _AliasStatus.formatError;
+        _error = 'Must be 3–24 characters.';
+      });
+      return;
+    }
+    if (!_re.hasMatch(v)) {
+      setState(() {
+        _status = _AliasStatus.formatError;
+        _error = 'Letters, numbers, and _ only.';
+      });
+      return;
+    }
+    // Block save while still checking or known-taken; allow unchanged value
+    // (idle) and confirmed available.
+    if (_status == _AliasStatus.checking ||
+        _status == _AliasStatus.taken ||
+        _status == _AliasStatus.formatError) {
+      return;
+    }
+    Navigator.pop(context, v);
+  }
+
+  Widget? _suffixIcon() {
+    switch (_status) {
+      case _AliasStatus.checking:
+        return const Padding(
+          padding: EdgeInsets.all(12),
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        );
+      case _AliasStatus.available:
+        return const Icon(Icons.check_circle, color: Colors.green);
+      case _AliasStatus.taken:
+      case _AliasStatus.formatError:
+        return const Icon(Icons.error, color: Colors.redAccent);
+      case _AliasStatus.idle:
+        return null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canSave = _status == _AliasStatus.idle ||
+        _status == _AliasStatus.available;
+    return AlertDialog(
+      title: const Text('Choose an alias'),
+      content: TextField(
+        controller: _ctrl,
+        autofocus: true,
+        maxLength: 24,
+        decoration: InputDecoration(
+          hintText: 'e.g. vivi_93',
+          errorText: _error,
+          suffixIcon: _suffixIcon(),
+          border: const OutlineInputBorder(),
+        ),
+        onSubmitted: (_) => _save(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: canSave ? _save : null,
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }

@@ -141,6 +141,15 @@ class UserProfile {
   /// Tier — 'free' | 'pro'.
   final String tier;
 
+  /// Avatar identity. Encoding:
+  ///   - `null` → use initials fallback (deterministic color from alias)
+  ///   - `default:1` .. `default:5` → bundled asset in `assets/avatars/`
+  ///   - `file:/abs/path.jpg` → user-uploaded image on-device
+  ///
+  /// Avatar picker in Settings writes this; everywhere else we read via
+  /// `UserAvatar` widget which handles all three cases.
+  final String? avatarKey;
+
   const UserProfile({
     this.id,
     this.alias,
@@ -153,6 +162,7 @@ class UserProfile {
     this.dismissedIds = const {},
     this.quizCompletion = QuizCompletion.none,
     this.tier = 'free',
+    this.avatarKey,
   });
 
   static const anonymous = UserProfile();
@@ -213,6 +223,7 @@ class UserProfile {
     Set<String>? dismissedIds,
     QuizCompletion? quizCompletion,
     String? tier,
+    Object? avatarKey = _sentinel,
   }) {
     return UserProfile(
       id: id ?? this.id,
@@ -226,6 +237,9 @@ class UserProfile {
       dismissedIds: dismissedIds ?? this.dismissedIds,
       quizCompletion: quizCompletion ?? this.quizCompletion,
       tier: tier ?? this.tier,
+      avatarKey: avatarKey == _sentinel ? this.avatarKey : avatarKey as String?,
     );
   }
 }
+
+const _sentinel = Object();

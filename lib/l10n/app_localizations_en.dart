@@ -9,7 +9,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'The Remote';
+  String get appTitle => 'Flixscope';
 
   @override
   String get homeTitle => 'What matters now';
@@ -56,7 +56,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fiveGemsLockedCta => 'Unlock with Premium';
 
   @override
-  String get paywallTitle => 'The Remote Premium';
+  String get paywallTitle => 'Flixscope Premium';
 
   @override
   String get paywallSubtitle => 'Decide better, and before everyone else.';
@@ -101,7 +101,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get discoverSectionPopularRegion => 'Popular in your region';
 
   @override
-  String get discoverSectionHiddenGems => 'Hidden gems';
+  String get discoverSectionUnderRadar => 'Under the radar';
 
   @override
   String get discoverSectionUnder90 => 'Under 90 minutes';
@@ -198,6 +198,60 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tabProfile => 'Profile';
 
   @override
+  String get tabVault => 'Vault';
+
+  @override
+  String get vaultTitle => 'My Vault';
+
+  @override
+  String get vaultSubtitle => 'Your personal library.';
+
+  @override
+  String get vaultTabLoved => 'Loved';
+
+  @override
+  String get vaultTabRanking => 'Ranking';
+
+  @override
+  String get vaultTabWatchlist => 'Watchlist';
+
+  @override
+  String get vaultTabNotForMe => 'Not for me';
+
+  @override
+  String get vaultTabFollowing => 'Following';
+
+  @override
+  String get vaultEmptyLoved =>
+      'Nothing loved yet. Rate a title 5★ to add it here.';
+
+  @override
+  String get vaultEmptyRanking =>
+      'Rate titles and see them here sorted by stars.';
+
+  @override
+  String get vaultEmptyWatchlist =>
+      'Your watchlist is empty. Tap 🔖 to save titles for later.';
+
+  @override
+  String get vaultEmptyNotForMe =>
+      'Nothing dismissed yet. Tap \'Not for me\' on a title to hide it.';
+
+  @override
+  String get vaultEmptyFollowing =>
+      'You\'re not following anyone yet. Visit Creators to follow trusted voices.';
+
+  @override
+  String get settingsTitle => 'Settings';
+
+  @override
+  String get settingsAvatarTitle => 'Avatar';
+
+  @override
+  String get settingsAvatarHint =>
+      'Pick initials, a default avatar, or upload your own.';
+
+  @override
   String get profileTitle => 'Profile';
 
   @override
@@ -253,6 +307,36 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get countryUk => 'United Kingdom';
+
+  @override
+  String get countryCa => 'Canada';
+
+  @override
+  String get countryBr => 'Brazil';
+
+  @override
+  String get countryIe => 'Ireland';
+
+  @override
+  String get countryFr => 'France';
+
+  @override
+  String get countryDe => 'Germany';
+
+  @override
+  String get countryIt => 'Italy';
+
+  @override
+  String get countryNl => 'Netherlands';
+
+  @override
+  String get countryPt => 'Portugal';
+
+  @override
+  String get countrySe => 'Sweden';
+
+  @override
+  String get countryOther => 'Rest of the world';
 
   @override
   String get profileSectionAccount => 'Account';
@@ -319,7 +403,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileSendFeedback => 'Send feedback';
 
   @override
-  String get profileRateApp => 'Rate The Remote';
+  String get profileRateApp => 'Rate Flixscope';
 
   @override
   String get profileTerms => 'Terms of Service';
@@ -466,7 +550,79 @@ class AppLocalizationsEn extends AppLocalizations {
       'Upgrade to Premium for unlimited AI chat and Decision Assistant.';
 
   @override
-  String get onboardingWelcome => 'Welcome to The Remote';
+  String get longQuizTitle => 'Tune your taste';
+
+  @override
+  String get longQuizIntro =>
+      'A few minutes of input unlocks classic gems and sharper picks for you.';
+
+  @override
+  String get longQuizStepGrid => 'Which of these have you seen?';
+
+  @override
+  String get longQuizStepGridSub =>
+      'Tap once for seen, twice if you loved it. We use this to find your blind spots.';
+
+  @override
+  String get longQuizStepThemes => 'What do you love?';
+
+  @override
+  String get longQuizStepThemesSub =>
+      'Directors, themes, moods — anything. Comma-separated.';
+
+  @override
+  String get longQuizThemesHint =>
+      'e.g. Denis Villeneuve, slow burn, neo-noir, 70s paranoia';
+
+  @override
+  String get longQuizLegendSeen => 'Seen';
+
+  @override
+  String get longQuizLegendLoved => 'Loved';
+
+  @override
+  String get longQuizBack => 'Back';
+
+  @override
+  String get longQuizNext => 'Next';
+
+  @override
+  String get longQuizFinish => 'Finish';
+
+  @override
+  String get longQuizSkip => 'Skip for now';
+
+  @override
+  String get longQuizDoneTitle => 'Profile tuned';
+
+  @override
+  String get longQuizDoneBody => 'Your 5 Gems are about to get much smarter.';
+
+  @override
+  String get profileStrengthFast => 'Fast profile';
+
+  @override
+  String get profileStrengthLong => 'Full profile';
+
+  @override
+  String get profileStrengthCtaComplete => 'Complete your profile';
+
+  @override
+  String get profileStrengthCtaDone => 'Full profile — classics unlocked';
+
+  @override
+  String get profileStrengthHint =>
+      'Unlocks classic gems and sharper recommendations.';
+
+  @override
+  String get discoverLongQuizBanner => 'Can\'t find what you want?';
+
+  @override
+  String get discoverLongQuizBannerSub =>
+      'Spend 2 minutes tuning your taste and we\'ll find it for you.';
+
+  @override
+  String get onboardingWelcome => 'Welcome to Flixscope';
 
   @override
   String get onboardingWelcomeSub =>
@@ -558,7 +714,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get contentSectionSynopsis => 'Synopsis';
 
   @override
-  String get contentSectionFansSay => 'The Remote Fans Say';
+  String get contentSectionFansSay => 'Flixscope Fans Say';
 
   @override
   String get contentSectionQuickTakes => 'Quick takes';
@@ -620,4 +776,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get contentNoTakes =>
       'No quick takes yet. Be the first verified watcher.';
+
+  @override
+  String get contentMyRating => 'Your rating';
+
+  @override
+  String get contentNotForMe => 'Not for me';
 }

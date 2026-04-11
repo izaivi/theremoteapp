@@ -5,11 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../data/mock/mock_content.dart';
 import '../../../data/models/content.dart';
+import '../../../data/repositories/catalog_provider.dart';
 import '../../../data/repositories/user_profile_repository.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../widgets/paywall_sheet.dart';
+import '../../widgets/user_avatar.dart';
 import '../../widgets/watcher_score_badge.dart';
 
 /// Home — la pantalla que vende el producto.
@@ -31,36 +32,83 @@ class HomeScreen extends ConsumerWidget {
     final profile = ref.watch(userProfileProvider);
     final isPro = profile.tier == 'pro';
 
+    final trendingAsync = ref.watch(trendingProvider);
+    final explodingAsync = ref.watch(explodingProvider);
+    final quickDecisionAsync = ref.watch(quickDecisionProvider);
+    final dailyGemsAsync = ref.watch(dailyGemsProvider);
+    final dontWasteAsync = ref.watch(dontWasteProvider);
+
+    // While data loads, show a spinner.
+    final trending = trendingAsync.valueOrNull ?? [];
+    final exploding = explodingAsync.valueOrNull ?? [];
+    final quickDecision = quickDecisionAsync.valueOrNull ?? [];
+    final dontWaste = dontWasteAsync.valueOrNull ?? [];
+
     // 5 Gems tease: si el user es free, las 2 gemas con menor Watcher Score
     // se ven claras y las 3 mejores quedan bloqueadas con blur + overlay.
-    final allGems = [...MockContent.dailyGems]
+    final allGems = [...(dailyGemsAsync.valueOrNull ?? [])]
       ..sort((a, b) => a.content.watcherScore.compareTo(b.content.watcherScore));
     final visibleGems = isPro ? allGems : allGems.take(2).toList();
     final lockedGems = isPro ? const <Gem>[] : allGems.skip(2).toList();
 
+    // Show loading indicator while catalog loads.
+    if (trendingAsync.isLoading && trending.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return SafeArea(
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
-          // Header
-          Text(
-            l10n.homeTitle,
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
+          // Header row: avatar (→ Vault) · title block · gear (→ Settings)
+          Row(
+            children: [
+              InkWell(
+                onTap: () => context.go('/vault'),
+                borderRadius: BorderRadius.circular(22),
+                child: UserAvatar(
+                  avatarKey: profile.avatarKey,
+                  seed: profile.alias ?? l10n.homeTitle,
+                  size: 40,
+                  withBorder: true,
                 ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.homeTitle,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      l10n.homeTagline,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: l10n.settingsTitle,
+                onPressed: () => context.push('/settings'),
+                icon: const Icon(Icons.settings_outlined),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            l10n.homeTagline,
-            style: const TextStyle(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 20),
 
           // 1. Trending
           _ContentCarousel(
             title: l10n.sectionTrendingNow,
             subtitle: l10n.sectionTrendingSubtitle,
-            items: MockContent.trending,
+            items: trending,
           ),
           const SizedBox(height: 24),
 
@@ -68,7 +116,7 @@ class HomeScreen extends ConsumerWidget {
           _ContentCarousel(
             title: l10n.sectionExploding,
             subtitle: l10n.sectionExplodingSubtitle,
-            items: MockContent.exploding,
+            items: exploding,
             accent: Colors.orangeAccent,
           ),
           const SizedBox(height: 24),
@@ -77,7 +125,7 @@ class HomeScreen extends ConsumerWidget {
           _ContentCarousel(
             title: l10n.sectionQuickDecision,
             subtitle: l10n.sectionQuickDecisionSubtitle,
-            items: MockContent.quickDecision,
+            items: quickDecision,
             showDuration: true,
           ),
           const SizedBox(height: 24),
@@ -100,7 +148,7 @@ class HomeScreen extends ConsumerWidget {
           _AvoidSection(
             title: l10n.sectionDontWaste,
             subtitle: l10n.sectionDontWasteSubtitle,
-            items: MockContent.dontWaste,
+            items: dontWaste,
           ),
         ],
       ),

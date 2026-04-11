@@ -34,14 +34,26 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final Set<String> _platforms = {};
   final Set<String> _genres = {};
 
+  // Ordered by streaming market size + geographic grouping (North America,
+  // LATAM, Europe). Source: Digital TV Research 2024 + Statista SVOD reports.
   static const _countryCodes = [
     'US',
+    'CA',
     'MX',
-    'ES',
+    'BR',
     'AR',
     'CO',
     'CL',
+    'ES',
     'GB',
+    'IE',
+    'FR',
+    'DE',
+    'IT',
+    'NL',
+    'PT',
+    'SE',
+    'XX', // Rest of the world — falls back to system country or 'US' in effectiveCountryProvider.
   ];
 
   static const _platformOptions = [
@@ -50,6 +62,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     'HBO/Max',
     'Apple TV+',
     'Prime Video',
+    'Crunchyroll',
     'Paramount+',
     'Peacock',
     'MUBI',
@@ -112,13 +125,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           curve: Curves.easeOutCubic);
       return;
     }
-    // Finish — persist and let router redirect to Home.
+    // Finish — persist quiz answers.
     await ref.read(userProfileProvider.notifier).completeFastQuiz(
           country: _country!,
           activePlatforms: _platforms.toList(),
           favoriteGenres: _genres.toList(),
         );
-    if (mounted) context.go('/home');
+    // Send to auth screen so the user signs in (or continues as guest)
+    // before seeing the catalog. This avoids the "empty Home" problem
+    // where the catalog provider fires before any session exists.
+    if (mounted) context.go('/auth');
   }
 
   void _back() {
@@ -295,6 +311,26 @@ class _CountryStep extends StatelessWidget {
         return l10n.countryCl;
       case 'GB':
         return l10n.countryUk;
+      case 'CA':
+        return l10n.countryCa;
+      case 'BR':
+        return l10n.countryBr;
+      case 'IE':
+        return l10n.countryIe;
+      case 'FR':
+        return l10n.countryFr;
+      case 'DE':
+        return l10n.countryDe;
+      case 'IT':
+        return l10n.countryIt;
+      case 'NL':
+        return l10n.countryNl;
+      case 'PT':
+        return l10n.countryPt;
+      case 'SE':
+        return l10n.countrySe;
+      case 'XX':
+        return l10n.countryOther;
       default:
         return code;
     }

@@ -1,6 +1,6 @@
 /// Creator & CreatorTake models.
 ///
-/// A Creator is a trusted voice in The Remote. V1 supports a mix of:
+/// A Creator is a trusted voice in Flixscope. V1 supports a mix of:
 ///   - **Curated critics**: manually whitelisted by the team (Letterboxd-
 ///     inspired). Carry an `isCurated = true` badge.
 ///   - **Power users**: organic app users promoted by the system once

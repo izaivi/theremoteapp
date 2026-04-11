@@ -7,20 +7,22 @@ class MainScaffold extends StatelessWidget {
   final Widget child;
   const MainScaffold({super.key, required this.child});
 
+  // Bottom nav: Home · Discover · Vault (Mi Bóveda) · Creators · Chat.
+  // Settings moved out of the shell — accessible via gear icon in Home header.
   static const _routes = [
     '/home',
     '/discover',
-    '/chat',
+    '/vault',
     '/creators',
-    '/profile',
+    '/chat',
   ];
 
   static const _icons = [
     Icons.home_outlined,
     Icons.search,
-    Icons.auto_awesome_outlined,
+    Icons.bookmark_outline,
     Icons.movie_filter_outlined,
-    Icons.person_outline,
+    Icons.auto_awesome_outlined,
   ];
 
   int _indexFromLocation(String loc) {
@@ -39,9 +41,9 @@ class MainScaffold extends StatelessWidget {
     final labels = [
       l10n.tabHome,
       l10n.tabDiscover,
-      l10n.tabAi,
+      l10n.tabVault,
       l10n.tabCreators,
-      l10n.tabProfile,
+      l10n.tabAi,
     ];
 
     return Scaffold(

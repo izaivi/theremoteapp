@@ -1,6 +1,6 @@
 {
   "@@locale": "en",
-  "appTitle": "The Remote",
+  "appTitle": "Flixscope",
 
   "homeTitle": "What matters now",
   "homeTagline": "We don't show you what's popular. We show you what's worth your time.",
@@ -19,7 +19,7 @@
     "placeholders": { "count": { "type": "int" } }
   },
   "fiveGemsLockedCta": "Unlock with Premium",
-  "paywallTitle": "The Remote Premium",
+  "paywallTitle": "Flixscope Premium",
   "paywallSubtitle": "Decide better, and before everyone else.",
   "paywallFeatureGems": "All 5 Gems daily + Decision Assistant",
   "paywallFeatureChat": "Unlimited AI Chat",
@@ -35,7 +35,7 @@
   "discoverFilters": "Filters",
   "discoverClearFilters": "Clear",
   "discoverSectionPopularRegion": "Popular in your region",
-  "discoverSectionHiddenGems": "Hidden gems",
+  "discoverSectionUnderRadar": "Under the radar",
   "discoverSectionUnder90": "Under 90 minutes",
   "discoverSectionBingeable": "Finish this weekend",
   "discoverEmpty": "Nothing matches those filters.",
@@ -77,6 +77,24 @@
   "tabAi": "AI",
   "tabCreators": "Creators",
   "tabProfile": "Profile",
+  "tabVault": "Vault",
+
+  "vaultTitle": "My Vault",
+  "vaultSubtitle": "Your personal library.",
+  "vaultTabLoved": "Loved",
+  "vaultTabRanking": "Ranking",
+  "vaultTabWatchlist": "Watchlist",
+  "vaultTabNotForMe": "Not for me",
+  "vaultTabFollowing": "Following",
+  "vaultEmptyLoved": "Nothing loved yet. Rate a title 5★ to add it here.",
+  "vaultEmptyRanking": "Rate titles and see them here sorted by stars.",
+  "vaultEmptyWatchlist": "Your watchlist is empty. Tap 🔖 to save titles for later.",
+  "vaultEmptyNotForMe": "Nothing dismissed yet. Tap 'Not for me' on a title to hide it.",
+  "vaultEmptyFollowing": "You're not following anyone yet. Visit Creators to follow trusted voices.",
+
+  "settingsTitle": "Settings",
+  "settingsAvatarTitle": "Avatar",
+  "settingsAvatarHint": "Pick initials, a default avatar, or upload your own.",
 
   "profileTitle": "Profile",
   "settingsLanguageSection": "Language & region",
@@ -98,6 +116,16 @@
   "countryCo": "Colombia",
   "countryCl": "Chile",
   "countryUk": "United Kingdom",
+  "countryCa": "Canada",
+  "countryBr": "Brazil",
+  "countryIe": "Ireland",
+  "countryFr": "France",
+  "countryDe": "Germany",
+  "countryIt": "Italy",
+  "countryNl": "Netherlands",
+  "countryPt": "Portugal",
+  "countrySe": "Sweden",
+  "countryOther": "Rest of the world",
 
   "profileSectionAccount": "Account",
   "profileSectionProfile": "Profile",
@@ -121,7 +149,7 @@
   "profileHelpCenter": "Help Center",
   "profileContactUs": "Contact us",
   "profileSendFeedback": "Send feedback",
-  "profileRateApp": "Rate The Remote",
+  "profileRateApp": "Rate Flixscope",
   "profileTerms": "Terms of Service",
   "profilePrivacy": "Privacy Policy",
   "profileLicenses": "Open source licenses",
@@ -175,7 +203,32 @@
   "chatQuotaExhaustedTitle": "You\u2019ve used your 5 free questions today",
   "chatQuotaExhaustedBody": "Upgrade to Premium for unlimited AI chat and Decision Assistant.",
 
-  "onboardingWelcome": "Welcome to The Remote",
+  "longQuizTitle": "Tune your taste",
+  "longQuizIntro": "A few minutes of input unlocks classic gems and sharper picks for you.",
+  "longQuizStepGrid": "Which of these have you seen?",
+  "longQuizStepGridSub": "Tap once for seen, twice if you loved it. We use this to find your blind spots.",
+  "longQuizStepThemes": "What do you love?",
+  "longQuizStepThemesSub": "Directors, themes, moods — anything. Comma-separated.",
+  "longQuizThemesHint": "e.g. Denis Villeneuve, slow burn, neo-noir, 70s paranoia",
+  "longQuizLegendSeen": "Seen",
+  "longQuizLegendLoved": "Loved",
+  "longQuizBack": "Back",
+  "longQuizNext": "Next",
+  "longQuizFinish": "Finish",
+  "longQuizSkip": "Skip for now",
+  "longQuizDoneTitle": "Profile tuned",
+  "longQuizDoneBody": "Your 5 Gems are about to get much smarter.",
+
+  "profileStrengthFast": "Fast profile",
+  "profileStrengthLong": "Full profile",
+  "profileStrengthCtaComplete": "Complete your profile",
+  "profileStrengthCtaDone": "Full profile — classics unlocked",
+  "profileStrengthHint": "Unlocks classic gems and sharper recommendations.",
+
+  "discoverLongQuizBanner": "Can't find what you want?",
+  "discoverLongQuizBannerSub": "Spend 2 minutes tuning your taste and we'll find it for you.",
+
+  "onboardingWelcome": "Welcome to Flixscope",
   "onboardingWelcomeSub": "30 seconds and we'll start finding what's worth your time.",
 
   "onboardingStep1Title": "Where do you watch from?",
@@ -214,7 +267,7 @@
   "contentBack": "Back",
   "contentSectionSignals": "Signals",
   "contentSectionSynopsis": "Synopsis",
-  "contentSectionFansSay": "The Remote Fans Say",
+  "contentSectionFansSay": "Flixscope Fans Say",
   "contentSectionQuickTakes": "Quick takes",
   "contentSectionAvailable": "Available on",
 
@@ -246,5 +299,7 @@
   "contentActionTake": "Write a take",
   "contentLoginGate": "Sign in to rate and share your take. Your signal helps other viewers find joyas.",
   "contentLoginGateCta": "Sign in later",
-  "contentNoTakes": "No quick takes yet. Be the first verified watcher."
+  "contentNoTakes": "No quick takes yet. Be the first verified watcher.",
+  "contentMyRating": "Your rating",
+  "contentNotForMe": "Not for me"
 }

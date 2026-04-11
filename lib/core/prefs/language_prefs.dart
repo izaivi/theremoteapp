@@ -127,7 +127,10 @@ final uiLocaleProvider = Provider<Locale?>((ref) {
 /// availability. Falls back to the device country, then 'US' as last resort.
 final effectiveCountryProvider = Provider<String>((ref) {
   final prefs = ref.watch(languagePrefsProvider);
-  if (prefs.country != null && prefs.country!.isNotEmpty) return prefs.country!;
+  final c = prefs.country;
+  // 'XX' = "Rest of the world" (explicit user pick for unlisted markets).
+  // Treat as auto: fall back to system country, then 'US' as last resort.
+  if (c != null && c.isNotEmpty && c != 'XX') return c;
   final system = WidgetsBinding.instance.platformDispatcher.locale;
   return (system.countryCode ?? 'US').toUpperCase();
 });

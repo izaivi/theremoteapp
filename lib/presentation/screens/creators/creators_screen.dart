@@ -3,12 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../data/mock/mock_content.dart';
 import '../../../data/mock/mock_creators.dart';
 import '../../../data/models/content.dart';
 import '../../../data/models/creator.dart';
+import '../../../data/repositories/catalog_provider.dart';
+import '../../../data/repositories/creators_provider.dart';
 import '../../../data/repositories/follows_repository.dart';
+import '../../../data/repositories/user_profile_repository.dart';
+import '../../../data/repositories/vault_repository.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../widgets/user_avatar.dart';
 
 /// Creators — trusted voices.
 ///
@@ -23,8 +27,13 @@ class CreatorsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final featuredSkip = MockCreators.featuredSkip;
-    final latest = MockCreators.latestTakes;
+    final creatorsAsync = ref.watch(creatorsProvider);
+    final latestAsync = ref.watch(latestTakesProvider);
+    final featuredSkipAsync = ref.watch(featuredSkipProvider);
+
+    final creators = creatorsAsync.valueOrNull ?? MockCreators.creators;
+    final latest = latestAsync.valueOrNull ?? [];
+    final featuredSkip = featuredSkipAsync.valueOrNull;
 
     return SafeArea(
       child: ListView(
@@ -56,10 +65,10 @@ class CreatorsScreen extends ConsumerWidget {
             height: 138,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              itemCount: MockCreators.creators.length,
+              itemCount: creators.length,
               separatorBuilder: (_, __) => const SizedBox(width: 12),
               itemBuilder: (_, i) =>
-                  _CreatorChip(creator: MockCreators.creators[i]),
+                  _CreatorChip(creator: creators[i]),
             ),
           ),
           const SizedBox(height: 28),
@@ -67,11 +76,14 @@ class CreatorsScreen extends ConsumerWidget {
           // ---- Latest takes feed ----
           _SectionTitle(l10n.creatorsSectionLatest),
           const SizedBox(height: 12),
-          for (final take in latest)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _TakeCard(take: take),
-            ),
+          if (latest.isEmpty && latestAsync.isLoading)
+            const Center(child: CircularProgressIndicator())
+          else
+            for (final take in latest)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _TakeCard(take: take),
+              ),
         ],
       ),
     );
@@ -132,6 +144,36 @@ class _Avatar extends StatelessWidget {
   }
 }
 
+/// Avatar that automatically shows the real profile photo when the creator
+/// is the currently logged-in user, falling back to colored initials otherwise.
+class _SmartAvatar extends StatelessWidget {
+  final WidgetRef ref;
+  final Creator creator;
+  final double size;
+  const _SmartAvatar({
+    required this.ref,
+    required this.creator,
+    this.size = 48,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final currentCreator = ref.watch(currentCreatorProvider).valueOrNull;
+    final isMe = currentCreator?.id == creator.id;
+    final profile = isMe ? ref.watch(userProfileProvider) : null;
+
+    if (isMe && profile != null) {
+      return UserAvatar(
+        avatarKey: profile.avatarKey,
+        seed: creator.alias,
+        size: size,
+        withBorder: false,
+      );
+    }
+    return _Avatar(alias: creator.alias, size: size);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Featured skip card
 // ---------------------------------------------------------------------------
@@ -143,8 +185,10 @@ class _FeaturedSkipCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final content = MockContent.byId(take.contentId);
-    final creator = MockCreators.byId(take.creatorId);
+    final catalog = ref.watch(catalogProvider).valueOrNull ?? [];
+    final content = catalog.where((c) => c.id == take.contentId).firstOrNull;
+    final creatorAsync = ref.watch(creatorByIdProvider(take.creatorId));
+    final creator = creatorAsync.valueOrNull ?? MockCreators.byId(take.creatorId);
     if (content == null || creator == null) return const SizedBox.shrink();
 
     const danger = Color(0xFFE5484D);
@@ -245,7 +289,7 @@ class _FeaturedSkipCard extends ConsumerWidget {
                       onTap: () => context.push('/creator/${creator.id}'),
                       child: Row(
                         children: [
-                          _Avatar(alias: creator.alias, size: 22),
+                          _SmartAvatar(ref: ref, creator: creator, size: 22),
                           const SizedBox(width: 6),
                           Text(
                             creator.alias,
@@ -284,6 +328,7 @@ class _CreatorChip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isFollowing = ref.watch(followsProvider).contains(creator.id);
+
     return GestureDetector(
       onTap: () => context.push('/creator/${creator.id}'),
       child: Container(
@@ -303,7 +348,7 @@ class _CreatorChip extends ConsumerWidget {
           children: [
             Stack(
               children: [
-                _Avatar(alias: creator.alias, size: 52),
+                _SmartAvatar(ref: ref, creator: creator, size: 52),
                 if (creator.isCurated)
                   Positioned(
                     right: -2,
@@ -355,8 +400,10 @@ class _TakeCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final content = MockContent.byId(take.contentId);
-    final creator = MockCreators.byId(take.creatorId);
+    final catalog = ref.watch(catalogProvider).valueOrNull ?? [];
+    final content = catalog.where((c) => c.id == take.contentId).firstOrNull;
+    final creatorAsync = ref.watch(creatorByIdProvider(take.creatorId));
+    final creator = creatorAsync.valueOrNull ?? MockCreators.byId(take.creatorId);
     if (content == null || creator == null) return const SizedBox.shrink();
 
     final verdictColor = switch (take.verdict) {
@@ -390,7 +437,7 @@ class _TakeCard extends ConsumerWidget {
             onTap: () => context.push('/creator/${creator.id}'),
             child: Row(
               children: [
-                _Avatar(alias: creator.alias, size: 36),
+                _SmartAvatar(ref: ref, creator: creator, size: 36),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -522,18 +569,30 @@ class _TakeCard extends ConsumerWidget {
 /// Local reaction state. Pre-auth this is in-memory only; survives while the
 /// screen is alive. Keyed by content id so different takes about the same
 /// title stay in sync visually.
-enum _Reaction { none, up, down }
+/// Take actions — semantically split between "content signals" and
+/// "take feedback", a distinction Vivi caught on 2026-04-08:
+///
+///   - **Save (🔖)** — content signal. Wired to [vaultProvider.watchlist]
+///     because "save this title for later" is about the *movie*, not the
+///     take. Surfaces under Vault → Watchlist.
+///   - **👍 / 👎** — feedback on the creator's *review*, not on the movie.
+///     ("Good call, creator" vs "I disagree with this take"). Kept as
+///     ephemeral local UI state; will move to Supabase `take_reactions`
+///     (user_id, take_id, reaction) when backend lands. NOT stored in vault.
+///
+/// The prior version wired thumbs to vault.loved / vault.notForMe, which
+/// conflated "this take is helpful" with "I love this movie" — fixed.
+enum _TakeReaction { none, up, down }
 
-class _TakeActions extends StatefulWidget {
+class _TakeActions extends ConsumerStatefulWidget {
   final Content content;
   const _TakeActions({required this.content});
   @override
-  State<_TakeActions> createState() => _TakeActionsState();
+  ConsumerState<_TakeActions> createState() => _TakeActionsState();
 }
 
-class _TakeActionsState extends State<_TakeActions> {
-  bool _saved = false;
-  _Reaction _reaction = _Reaction.none;
+class _TakeActionsState extends ConsumerState<_TakeActions> {
+  _TakeReaction _reaction = _TakeReaction.none;
 
   void _snack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -548,6 +607,9 @@ class _TakeActionsState extends State<_TakeActions> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final vault = ref.watch(vaultProvider);
+    final ctrl = ref.read(vaultProvider.notifier);
+    final saved = vault.isWatchlisted(widget.content.id);
 
     return Row(
       children: [
@@ -558,38 +620,42 @@ class _TakeActionsState extends State<_TakeActions> {
         ),
         const SizedBox(width: 8),
         _ActionBtn(
-          icon: _saved ? Icons.bookmark : Icons.bookmark_border,
+          icon: saved ? Icons.bookmark : Icons.bookmark_border,
           label: l10n.creatorActionSave,
-          active: _saved,
-          onTap: () {
-            setState(() => _saved = !_saved);
-            if (_saved) _snack(l10n.creatorTakeSaved);
+          active: saved,
+          onTap: () async {
+            await ctrl.toggleWatchlist(widget.content.id);
+            if (!saved && context.mounted) {
+              _snack(l10n.creatorTakeSaved);
+            }
           },
         ),
         const SizedBox(width: 8),
         _ActionBtn(
-          icon: _reaction == _Reaction.up
+          icon: _reaction == _TakeReaction.up
               ? Icons.thumb_up_alt
               : Icons.thumb_up_alt_outlined,
-          active: _reaction == _Reaction.up,
+          active: _reaction == _TakeReaction.up,
           onTap: () {
-            setState(() => _reaction =
-                _reaction == _Reaction.up ? _Reaction.none : _Reaction.up);
-            if (_reaction == _Reaction.up) {
+            setState(() => _reaction = _reaction == _TakeReaction.up
+                ? _TakeReaction.none
+                : _TakeReaction.up);
+            if (_reaction == _TakeReaction.up) {
               _snack(l10n.creatorTakeHelpfulRecorded);
             }
           },
         ),
         const SizedBox(width: 8),
         _ActionBtn(
-          icon: _reaction == _Reaction.down
+          icon: _reaction == _TakeReaction.down
               ? Icons.thumb_down_alt
               : Icons.thumb_down_alt_outlined,
-          active: _reaction == _Reaction.down,
+          active: _reaction == _TakeReaction.down,
           onTap: () {
-            setState(() => _reaction =
-                _reaction == _Reaction.down ? _Reaction.none : _Reaction.down);
-            if (_reaction == _Reaction.down) {
+            setState(() => _reaction = _reaction == _TakeReaction.down
+                ? _TakeReaction.none
+                : _TakeReaction.down);
+            if (_reaction == _TakeReaction.down) {
               _snack(l10n.creatorTakeHelpfulRecorded);
             }
           },

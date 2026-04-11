@@ -3,8 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../data/mock/mock_content.dart';
 import '../../../data/models/content.dart';
+import '../../../data/repositories/catalog_provider.dart';
+import '../../../data/models/user_profile.dart';
 import '../../../data/repositories/user_profile_repository.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../widgets/paywall_sheet.dart';
@@ -138,6 +139,9 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final profile = ref.watch(userProfileProvider);
+    final showLongQuizBanner =
+        !_hasActiveFilters && profile.quizCompletion != QuizCompletion.long;
     return SafeArea(
       child: Column(
         children: [
@@ -183,7 +187,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
                   Expanded(
                     child: Text(
                       l10n.discoverResultsCount(
-                          _applyFilters(MockContent.catalog).length),
+                          _applyFilters(ref.watch(catalogProvider).valueOrNull ?? []).length),
                       style: const TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -203,13 +207,21 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
                 ],
               ),
             ),
+          // --- Long quiz banner (idle + fast-only) ---
+          if (showLongQuizBanner)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: _LongQuizBanner(),
+            ),
           // --- Content area ---
           Expanded(
-            child: _hasActiveFilters
-                ? _ResultsGrid(
-                    items: _applyFilters(MockContent.catalog),
-                  )
-                : _IdleSections(l10n: l10n),
+            child: ref.watch(catalogProvider).when(
+              data: (catalog) => _hasActiveFilters
+                  ? _ResultsGrid(items: _applyFilters(catalog))
+                  : _IdleSections(l10n: l10n, catalog: catalog),
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('Error: $e')),
+            ),
           ),
         ],
       ),
@@ -225,30 +237,36 @@ enum _DurationBucket { short, medium, long }
 
 class _IdleSections extends StatelessWidget {
   final AppLocalizations l10n;
-  const _IdleSections({required this.l10n});
+  final List<Content> catalog;
+  const _IdleSections({required this.l10n, required this.catalog});
 
   @override
   Widget build(BuildContext context) {
     // Reuse the catalog for different "lenses".
-    final popular = MockContent.catalog
-        .where((c) => c.watcherScore >= 80)
-        .toList()
-      ..sort((a, b) => b.socialMentions.compareTo(a.socialMentions));
-    final hidden = MockContent.catalog
-        .where((c) => c.watcherScore >= 85 && c.socialMentions < 100000)
+    final popular = catalog
+        .where((c) => c.availablePlatforms.isNotEmpty)
+        .take(20)
         .toList();
-    final under90 = MockContent.catalog
-        .where((c) => c.type == ContentType.movie && c.durationMinutes < 90)
+    // "Under the radar" = pool NAVEGABLE de joyas de bajo ruido.
+    final underRadar = catalog
+        .where((c) => c.imdbScore != null && c.imdbScore! >= 7.0)
+        .skip(20)
+        .take(15)
         .toList();
-    final bingeable = MockContent.catalog
-        .where((c) => c.type == ContentType.series && c.watcherScore >= 85)
+    final under90 = catalog
+        .where((c) => c.type == ContentType.movie && c.durationMinutes > 0 && c.durationMinutes < 90)
+        .take(15)
+        .toList();
+    final bingeable = catalog
+        .where((c) => c.type == ContentType.series)
+        .take(15)
         .toList();
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(0, 8, 0, 32),
       children: [
         _Carousel(title: l10n.discoverSectionPopularRegion, items: popular),
-        _Carousel(title: l10n.discoverSectionHiddenGems, items: hidden),
+        _Carousel(title: l10n.discoverSectionUnderRadar, items: underRadar),
         _Carousel(title: l10n.discoverSectionUnder90, items: under90),
         _Carousel(title: l10n.discoverSectionBingeable, items: bingeable),
       ],
@@ -308,13 +326,30 @@ class _ResultsGrid extends StatelessWidget {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
-          child: Text(
-            l10n.discoverEmpty,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 14,
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/mascots/mascot_search.png',
+                width: 140,
+                height: 140,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Icon(
+                  Icons.search_off,
+                  size: 48,
+                  color: AppColors.textMuted,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                l10n.discoverEmpty,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -559,6 +594,7 @@ class _FiltersSheetState extends State<_FiltersSheet> {
     'HBO/Max',
     'Apple TV+',
     'Prime Video',
+    'Crunchyroll',
     'Paramount+',
   ];
 
@@ -881,6 +917,73 @@ class _LockedChip extends StatelessWidget {
                 color: AppColors.accent,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Long quiz banner (idle state, fast-only users)
+// ---------------------------------------------------------------------------
+
+class _LongQuizBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return GestureDetector(
+      onTap: () => context.push('/long-quiz'),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppColors.accent.withOpacity(0.28),
+              const Color(0xFF4F8CFF).withOpacity(0.18),
+            ],
+          ),
+          border: Border.all(color: AppColors.accent.withOpacity(0.55)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.accent.withOpacity(0.22),
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.accent),
+              ),
+              child: const Icon(Icons.tune,
+                  color: AppColors.accent, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.discoverLongQuizBanner,
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    l10n.discoverLongQuizBannerSub,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).textTheme.bodySmall?.color,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
+            const Icon(Icons.arrow_forward_rounded,
+                color: AppColors.accent, size: 20),
           ],
         ),
       ),

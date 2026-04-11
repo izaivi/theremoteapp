@@ -101,7 +101,7 @@ abstract class AppLocalizations {
   /// No description provided for @appTitle.
   ///
   /// In en, this message translates to:
-  /// **'The Remote'**
+  /// **'Flixscope'**
   String get appTitle;
 
   /// No description provided for @homeTitle.
@@ -185,7 +185,7 @@ abstract class AppLocalizations {
   /// No description provided for @paywallTitle.
   ///
   /// In en, this message translates to:
-  /// **'The Remote Premium'**
+  /// **'Flixscope Premium'**
   String get paywallTitle;
 
   /// No description provided for @paywallSubtitle.
@@ -272,11 +272,11 @@ abstract class AppLocalizations {
   /// **'Popular in your region'**
   String get discoverSectionPopularRegion;
 
-  /// No description provided for @discoverSectionHiddenGems.
+  /// No description provided for @discoverSectionUnderRadar.
   ///
   /// In en, this message translates to:
-  /// **'Hidden gems'**
-  String get discoverSectionHiddenGems;
+  /// **'Under the radar'**
+  String get discoverSectionUnderRadar;
 
   /// No description provided for @discoverSectionUnder90.
   ///
@@ -440,6 +440,102 @@ abstract class AppLocalizations {
   /// **'Profile'**
   String get tabProfile;
 
+  /// No description provided for @tabVault.
+  ///
+  /// In en, this message translates to:
+  /// **'Vault'**
+  String get tabVault;
+
+  /// No description provided for @vaultTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'My Vault'**
+  String get vaultTitle;
+
+  /// No description provided for @vaultSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your personal library.'**
+  String get vaultSubtitle;
+
+  /// No description provided for @vaultTabLoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Loved'**
+  String get vaultTabLoved;
+
+  /// No description provided for @vaultTabRanking.
+  ///
+  /// In en, this message translates to:
+  /// **'Ranking'**
+  String get vaultTabRanking;
+
+  /// No description provided for @vaultTabWatchlist.
+  ///
+  /// In en, this message translates to:
+  /// **'Watchlist'**
+  String get vaultTabWatchlist;
+
+  /// No description provided for @vaultTabNotForMe.
+  ///
+  /// In en, this message translates to:
+  /// **'Not for me'**
+  String get vaultTabNotForMe;
+
+  /// No description provided for @vaultTabFollowing.
+  ///
+  /// In en, this message translates to:
+  /// **'Following'**
+  String get vaultTabFollowing;
+
+  /// No description provided for @vaultEmptyLoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing loved yet. Rate a title 5★ to add it here.'**
+  String get vaultEmptyLoved;
+
+  /// No description provided for @vaultEmptyRanking.
+  ///
+  /// In en, this message translates to:
+  /// **'Rate titles and see them here sorted by stars.'**
+  String get vaultEmptyRanking;
+
+  /// No description provided for @vaultEmptyWatchlist.
+  ///
+  /// In en, this message translates to:
+  /// **'Your watchlist is empty. Tap 🔖 to save titles for later.'**
+  String get vaultEmptyWatchlist;
+
+  /// No description provided for @vaultEmptyNotForMe.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing dismissed yet. Tap \'Not for me\' on a title to hide it.'**
+  String get vaultEmptyNotForMe;
+
+  /// No description provided for @vaultEmptyFollowing.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re not following anyone yet. Visit Creators to follow trusted voices.'**
+  String get vaultEmptyFollowing;
+
+  /// No description provided for @settingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get settingsTitle;
+
+  /// No description provided for @settingsAvatarTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Avatar'**
+  String get settingsAvatarTitle;
+
+  /// No description provided for @settingsAvatarHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick initials, a default avatar, or upload your own.'**
+  String get settingsAvatarHint;
+
   /// No description provided for @profileTitle.
   ///
   /// In en, this message translates to:
@@ -547,6 +643,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'United Kingdom'**
   String get countryUk;
+
+  /// No description provided for @countryCa.
+  ///
+  /// In en, this message translates to:
+  /// **'Canada'**
+  String get countryCa;
+
+  /// No description provided for @countryBr.
+  ///
+  /// In en, this message translates to:
+  /// **'Brazil'**
+  String get countryBr;
+
+  /// No description provided for @countryIe.
+  ///
+  /// In en, this message translates to:
+  /// **'Ireland'**
+  String get countryIe;
+
+  /// No description provided for @countryFr.
+  ///
+  /// In en, this message translates to:
+  /// **'France'**
+  String get countryFr;
+
+  /// No description provided for @countryDe.
+  ///
+  /// In en, this message translates to:
+  /// **'Germany'**
+  String get countryDe;
+
+  /// No description provided for @countryIt.
+  ///
+  /// In en, this message translates to:
+  /// **'Italy'**
+  String get countryIt;
+
+  /// No description provided for @countryNl.
+  ///
+  /// In en, this message translates to:
+  /// **'Netherlands'**
+  String get countryNl;
+
+  /// No description provided for @countryPt.
+  ///
+  /// In en, this message translates to:
+  /// **'Portugal'**
+  String get countryPt;
+
+  /// No description provided for @countrySe.
+  ///
+  /// In en, this message translates to:
+  /// **'Sweden'**
+  String get countrySe;
+
+  /// No description provided for @countryOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Rest of the world'**
+  String get countryOther;
 
   /// No description provided for @profileSectionAccount.
   ///
@@ -677,7 +833,7 @@ abstract class AppLocalizations {
   /// No description provided for @profileRateApp.
   ///
   /// In en, this message translates to:
-  /// **'Rate The Remote'**
+  /// **'Rate Flixscope'**
   String get profileRateApp;
 
   /// No description provided for @profileTerms.
@@ -938,10 +1094,142 @@ abstract class AppLocalizations {
   /// **'Upgrade to Premium for unlimited AI chat and Decision Assistant.'**
   String get chatQuotaExhaustedBody;
 
+  /// No description provided for @longQuizTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tune your taste'**
+  String get longQuizTitle;
+
+  /// No description provided for @longQuizIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'A few minutes of input unlocks classic gems and sharper picks for you.'**
+  String get longQuizIntro;
+
+  /// No description provided for @longQuizStepGrid.
+  ///
+  /// In en, this message translates to:
+  /// **'Which of these have you seen?'**
+  String get longQuizStepGrid;
+
+  /// No description provided for @longQuizStepGridSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap once for seen, twice if you loved it. We use this to find your blind spots.'**
+  String get longQuizStepGridSub;
+
+  /// No description provided for @longQuizStepThemes.
+  ///
+  /// In en, this message translates to:
+  /// **'What do you love?'**
+  String get longQuizStepThemes;
+
+  /// No description provided for @longQuizStepThemesSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Directors, themes, moods — anything. Comma-separated.'**
+  String get longQuizStepThemesSub;
+
+  /// No description provided for @longQuizThemesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. Denis Villeneuve, slow burn, neo-noir, 70s paranoia'**
+  String get longQuizThemesHint;
+
+  /// No description provided for @longQuizLegendSeen.
+  ///
+  /// In en, this message translates to:
+  /// **'Seen'**
+  String get longQuizLegendSeen;
+
+  /// No description provided for @longQuizLegendLoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Loved'**
+  String get longQuizLegendLoved;
+
+  /// No description provided for @longQuizBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get longQuizBack;
+
+  /// No description provided for @longQuizNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get longQuizNext;
+
+  /// No description provided for @longQuizFinish.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish'**
+  String get longQuizFinish;
+
+  /// No description provided for @longQuizSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip for now'**
+  String get longQuizSkip;
+
+  /// No description provided for @longQuizDoneTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile tuned'**
+  String get longQuizDoneTitle;
+
+  /// No description provided for @longQuizDoneBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your 5 Gems are about to get much smarter.'**
+  String get longQuizDoneBody;
+
+  /// No description provided for @profileStrengthFast.
+  ///
+  /// In en, this message translates to:
+  /// **'Fast profile'**
+  String get profileStrengthFast;
+
+  /// No description provided for @profileStrengthLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Full profile'**
+  String get profileStrengthLong;
+
+  /// No description provided for @profileStrengthCtaComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete your profile'**
+  String get profileStrengthCtaComplete;
+
+  /// No description provided for @profileStrengthCtaDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Full profile — classics unlocked'**
+  String get profileStrengthCtaDone;
+
+  /// No description provided for @profileStrengthHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlocks classic gems and sharper recommendations.'**
+  String get profileStrengthHint;
+
+  /// No description provided for @discoverLongQuizBanner.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t find what you want?'**
+  String get discoverLongQuizBanner;
+
+  /// No description provided for @discoverLongQuizBannerSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Spend 2 minutes tuning your taste and we\'ll find it for you.'**
+  String get discoverLongQuizBannerSub;
+
   /// No description provided for @onboardingWelcome.
   ///
   /// In en, this message translates to:
-  /// **'Welcome to The Remote'**
+  /// **'Welcome to Flixscope'**
   String get onboardingWelcome;
 
   /// No description provided for @onboardingWelcomeSub.
@@ -1115,7 +1403,7 @@ abstract class AppLocalizations {
   /// No description provided for @contentSectionFansSay.
   ///
   /// In en, this message translates to:
-  /// **'The Remote Fans Say'**
+  /// **'Flixscope Fans Say'**
   String get contentSectionFansSay;
 
   /// No description provided for @contentSectionQuickTakes.
@@ -1219,6 +1507,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No quick takes yet. Be the first verified watcher.'**
   String get contentNoTakes;
+
+  /// No description provided for @contentMyRating.
+  ///
+  /// In en, this message translates to:
+  /// **'Your rating'**
+  String get contentMyRating;
+
+  /// No description provided for @contentNotForMe.
+  ///
+  /// In en, this message translates to:
+  /// **'Not for me'**
+  String get contentNotForMe;
 }
 
 class _AppLocalizationsDelegate

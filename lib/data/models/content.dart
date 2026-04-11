@@ -67,6 +67,10 @@ class Content {
   // Available platforms in user's region (denormalized for UI speed)
   final List<String> availablePlatforms;
 
+  /// Platform name → deep link URL (from Watchmode / TMDB).
+  /// Used to open streaming apps directly from the content detail screen.
+  final Map<String, String> platformDeepLinks;
+
   const Content({
     required this.id,
     this.tmdbId,
@@ -93,6 +97,7 @@ class Content {
     required this.socialMentions,
     required this.tags,
     required this.availablePlatforms,
+    this.platformDeepLinks = const {},
   });
 }
 

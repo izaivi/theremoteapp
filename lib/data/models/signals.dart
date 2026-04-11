@@ -1,4 +1,4 @@
-/// Señales sociales internas del producto — "The Remote Fans Say".
+/// Señales sociales internas del producto — "Flixscope Fans Say".
 ///
 /// Estos modelos representan lo que el backend devolverá por cada Content:
 /// (a) estadística agregada (stats) y (b) una lista de quick takes recientes.

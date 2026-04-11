@@ -54,7 +54,17 @@ class _PaywallContent extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+            Center(
+              child: Image.asset(
+                'assets/mascots/mascot_premium.png',
+                width: 120,
+                height: 120,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
+            const SizedBox(height: 12),
             Text(
               l10n.paywallTitle,
               textAlign: TextAlign.center,

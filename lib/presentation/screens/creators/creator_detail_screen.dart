@@ -3,11 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../data/mock/mock_content.dart';
 import '../../../data/mock/mock_creators.dart';
 import '../../../data/models/creator.dart';
+import '../../../data/repositories/catalog_provider.dart';
+import '../../../data/repositories/creators_provider.dart';
 import '../../../data/repositories/follows_repository.dart';
+import '../../../data/repositories/user_profile_repository.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../widgets/user_avatar.dart';
 
 /// Individual creator profile: bio + stats + their takes.
 class CreatorDetailScreen extends ConsumerWidget {
@@ -17,17 +20,21 @@ class CreatorDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final creator = MockCreators.byId(creatorId);
+    final creatorAsync = ref.watch(creatorByIdProvider(creatorId));
+    final creator = creatorAsync.valueOrNull ?? MockCreators.byId(creatorId);
 
     if (creator == null) {
       return Scaffold(
         appBar: AppBar(),
-        body: const Center(child: Text('Creator not found')),
+        body: creatorAsync.isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : const Center(child: Text('Creator not found')),
       );
     }
 
     final isFollowing = ref.watch(followsProvider).contains(creator.id);
-    final takes = MockCreators.takesBy(creator.id);
+    final takesAsync = ref.watch(takesByCreatorProvider(creator.id));
+    final takes = takesAsync.valueOrNull ?? MockCreators.takesBy(creator.id);
 
     return Scaffold(
       appBar: AppBar(
@@ -44,7 +51,7 @@ class CreatorDetailScreen extends ConsumerWidget {
             // Header
             Row(
               children: [
-                _BigAvatar(alias: creator.alias, isCurated: creator.isCurated),
+                _BigAvatar(creatorId: creator.id, alias: creator.alias, isCurated: creator.isCurated),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -145,43 +152,64 @@ class CreatorDetailScreen extends ConsumerWidget {
   }
 }
 
-class _BigAvatar extends StatelessWidget {
+class _BigAvatar extends ConsumerWidget {
+  final String creatorId;
   final String alias;
   final bool isCurated;
-  const _BigAvatar({required this.alias, required this.isCurated});
+  const _BigAvatar({
+    required this.creatorId,
+    required this.alias,
+    required this.isCurated,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    final clean = alias.replaceAll('@', '');
-    final initials = clean.length >= 2
-        ? clean.substring(0, 2).toUpperCase()
-        : clean.toUpperCase();
-    final hue = (clean.codeUnits.fold<int>(0, (a, b) => a + b) * 37) % 360;
-    final bg = HSLColor.fromAHSL(1.0, hue.toDouble(), 0.55, 0.45).toColor();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentCreator = ref.watch(currentCreatorProvider).valueOrNull;
+    final isMe = currentCreator?.id == creatorId;
+    final profile = isMe ? ref.watch(userProfileProvider) : null;
+
+    final Widget avatarContent;
+    if (isMe && profile != null) {
+      avatarContent = UserAvatar(
+        avatarKey: profile.avatarKey,
+        seed: alias,
+        size: 84,
+        withBorder: false,
+      );
+    } else {
+      final clean = alias.replaceAll('@', '');
+      final initials = clean.length >= 2
+          ? clean.substring(0, 2).toUpperCase()
+          : clean.toUpperCase();
+      final hue = (clean.codeUnits.fold<int>(0, (a, b) => a + b) * 37) % 360;
+      final bg = HSLColor.fromAHSL(1.0, hue.toDouble(), 0.55, 0.45).toColor();
+
+      avatarContent = Container(
+        width: 84,
+        height: 84,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: bg,
+          border: Border.all(
+            color: isCurated ? AppColors.accent : Colors.white24,
+            width: 2,
+          ),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          initials,
+          style: const TextStyle(
+            fontSize: 30,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+          ),
+        ),
+      );
+    }
 
     return Stack(
       children: [
-        Container(
-          width: 84,
-          height: 84,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: bg,
-            border: Border.all(
-              color: isCurated ? AppColors.accent : Colors.white24,
-              width: 2,
-            ),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            initials,
-            style: const TextStyle(
-              fontSize: 30,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-            ),
-          ),
-        ),
+        avatarContent,
         if (isCurated)
           const Positioned(
             right: 0,
@@ -197,14 +225,15 @@ class _BigAvatar extends StatelessWidget {
   }
 }
 
-class _DetailTakeRow extends StatelessWidget {
+class _DetailTakeRow extends ConsumerWidget {
   final CreatorTake take;
   const _DetailTakeRow({required this.take});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final content = MockContent.byId(take.contentId);
+    final catalog = ref.watch(catalogProvider).valueOrNull ?? [];
+    final content = catalog.where((c) => c.id == take.contentId).firstOrNull;
     if (content == null) return const SizedBox.shrink();
 
     final verdictColor = switch (take.verdict) {

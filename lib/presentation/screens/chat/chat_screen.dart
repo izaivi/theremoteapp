@@ -256,24 +256,30 @@ class _EmptyState extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
       children: [
         Center(
-          child: Container(
-            width: 88,
-            height: 88,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [
-                  AppColors.accent.withOpacity(0.35),
-                  const Color(0xFF4F8CFF).withOpacity(0.2),
-                ],
+          child: Image.asset(
+            'assets/mascots/mascot_thinking.png',
+            width: 140,
+            height: 140,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.accent.withOpacity(0.35),
+                    const Color(0xFF4F8CFF).withOpacity(0.2),
+                  ],
+                ),
+                border: Border.all(
+                  color: AppColors.accent.withOpacity(0.5),
+                  width: 1.5,
+                ),
               ),
-              border: Border.all(
-                color: AppColors.accent.withOpacity(0.5),
-                width: 1.5,
-              ),
+              child: const Icon(Icons.auto_awesome,
+                  color: Colors.white, size: 38),
             ),
-            child: const Icon(Icons.auto_awesome,
-                color: Colors.white, size: 38),
           ),
         ),
         const SizedBox(height: 20),
