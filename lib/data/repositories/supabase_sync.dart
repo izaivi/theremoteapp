@@ -126,7 +126,7 @@ class SupabaseSyncService {
           .eq('user_id', uid);
       return {
         for (final r in (rows as List))
-          (r['content_id'] as String): (r['stars'] as num).toInt()
+          r['content_id'].toString(): (r['stars'] as num).toInt()
       };
     } catch (_) {
       return const {};
@@ -176,7 +176,7 @@ class SupabaseSyncService {
       final watchlist = <String>{};
       final notForMe = <String>{};
       for (final r in (rows as List)) {
-        final id = r['content_id'] as String;
+        final id = r['content_id'].toString();
         switch (r['bucket'] as String) {
           case 'loved':
             loved.add(id);
