@@ -6,13 +6,13 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../data/mock/mock_content.dart';
 import '../../../data/models/content.dart';
 import '../../../data/models/creator.dart';
-import '../../../data/models/signals.dart';
 import '../../../data/repositories/catalog_provider.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../data/models/quick_take.dart' as qt;
 import '../../../data/repositories/creators_provider.dart';
+import '../../../data/repositories/quick_takes_provider.dart';
 import '../../../data/repositories/ratings_repository.dart';
 import '../../../data/repositories/user_profile_repository.dart';
 import '../../../data/repositories/vault_repository.dart';
@@ -58,9 +58,7 @@ class ContentScreen extends ConsumerWidget {
       );
     }
 
-    // FansSay and QuickTakes are still mock — real social signals come in Fase 2.
-    final fansSay = MockContent.fansSayFor(contentId);
-    final takes = MockContent.quickTakesFor(contentId);
+    // FansSay stats moved to real data — see _FlixscopeFansSaySection.
     final profile = ref.watch(userProfileProvider);
     final isAuthed = ref.watch(currentUserProvider) != null;
     final currentCreator = ref.watch(currentCreatorProvider).valueOrNull;
@@ -98,7 +96,7 @@ class ContentScreen extends ConsumerWidget {
               _MyRatingBar(contentId: content.id),
               if (currentCreator != null) ...[
                 const SizedBox(height: 12),
-                _WriteTakeButton(
+                _CreatorTakeAction(
                   creator: currentCreator,
                   content: content,
                 ),
@@ -119,14 +117,12 @@ class ContentScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              _Section(
-                title: l10n.contentSectionFansSay,
-                child: _FansSayBlock(stats: fansSay, l10n: l10n),
-              ),
+              _CreatorTakesSection(contentId: contentId),
               const SizedBox(height: 24),
-              _Section(
-                title: l10n.contentSectionQuickTakes,
-                child: _QuickTakesBlock(takes: takes, l10n: l10n),
+              _FlixscopeFansSaySection(
+                contentId: contentId,
+                content: content,
+                isAuthed: isAuthed,
               ),
               const SizedBox(height: 24),
               _Section(
@@ -393,21 +389,34 @@ class _StatDivider extends StatelessWidget {
 class _Section extends StatelessWidget {
   final String title;
   final Widget child;
-  const _Section({required this.title, required this.child});
+  final VoidCallback? onTitleTap;
+  const _Section({required this.title, required this.child, this.onTitleTap});
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-          child: Text(
-            title.toUpperCase(),
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.1,
-              color: AppColors.accent,
+        GestureDetector(
+          onTap: onTitleTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Row(
+              children: [
+                Text(
+                  title.toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.1,
+                    color: AppColors.accent,
+                  ),
+                ),
+                if (onTitleTap != null) ...[
+                  const SizedBox(width: 4),
+                  const Icon(Icons.arrow_forward_ios,
+                      size: 10, color: AppColors.accent),
+                ],
+              ],
             ),
           ),
         ),
@@ -418,57 +427,409 @@ class _Section extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Fans Say aggregate
+// Creator Takes section — real data from Supabase
+// Tap header → navigate to Creators screen
 // ---------------------------------------------------------------------------
 
-class _FansSayBlock extends StatelessWidget {
-  final FansSayStats? stats;
-  final AppLocalizations l10n;
-  const _FansSayBlock({required this.stats, required this.l10n});
+class _CreatorTakesSection extends ConsumerWidget {
+  final String contentId;
+  const _CreatorTakesSection({required this.contentId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final takesAsync = ref.watch(latestTakesProvider);
+    final allTakes = takesAsync.valueOrNull ?? [];
+    final creatorsAsync = ref.watch(creatorsProvider);
+    final creators = creatorsAsync.valueOrNull ?? [];
+
+    // Filter takes for this content, sorted by creator popularity (followers).
+    final takes = allTakes.where((t) => t.contentId == contentId).toList()
+      ..sort((a, b) {
+        final ca = creators.where((c) => c.id == a.creatorId).firstOrNull;
+        final cb = creators.where((c) => c.id == b.creatorId).firstOrNull;
+        final fa = ca?.followersCount ?? 0;
+        final fb = cb?.followersCount ?? 0;
+        if (fa != fb) return fb.compareTo(fa); // most followers first
+        return b.createdAt.compareTo(a.createdAt); // then newest
+      });
+
+    return _Section(
+      title: 'CREATOR TAKES',
+      onTitleTap: () => context.go('/creators'),
+      child: takes.isEmpty
+          ? const Padding(
+              padding: EdgeInsets.fromLTRB(20, 4, 20, 0),
+              child: Text(
+                'No creator takes yet.',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
+            )
+          : Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+              child: Column(
+                children: [
+                  for (final t in takes.take(3)) ...[
+                    _CreatorTakeCard(
+                      take: t,
+                      creator: creators.where((c) => c.id == t.creatorId).firstOrNull,
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  if (takes.length > 3)
+                    GestureDetector(
+                      onTap: () => context.go('/creators'),
+                      child: const Text(
+                        'See all creator takes →',
+                        style: TextStyle(
+                          color: AppColors.accent,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+    );
+  }
+}
+
+class _CreatorTakeCard extends StatelessWidget {
+  final CreatorTake take;
+  final Creator? creator;
+  const _CreatorTakeCard({required this.take, this.creator});
 
   @override
   Widget build(BuildContext context) {
-    if (stats == null || !stats!.hasEnoughSignal) {
-      return Padding(
+    final verdictColor = switch (take.verdict) {
+      CreatorVerdict.worthIt => AppColors.accent,
+      CreatorVerdict.skipIt => const Color(0xFFE5484D),
+    };
+    final verdictLabel = switch (take.verdict) {
+      CreatorVerdict.worthIt => 'Worth it',
+      CreatorVerdict.skipIt => 'Skip it',
+    };
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                creator?.alias ?? '?',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.accent,
+                  fontSize: 13,
+                ),
+              ),
+              if (creator?.isCurated == true) ...[
+                const SizedBox(width: 4),
+                const Icon(Icons.verified, size: 12, color: AppColors.accent),
+              ],
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: verdictColor.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: verdictColor.withOpacity(0.4)),
+                ),
+                child: Text(
+                  verdictLabel,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: verdictColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            take.body,
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+                fontSize: 14, height: 1.35, color: AppColors.textPrimary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Flixscope Fans Say — real quick takes from Supabase
+// Tap header → expanded list of all quick takes for this content
+// ---------------------------------------------------------------------------
+
+class _FlixscopeFansSaySection extends ConsumerWidget {
+  final String contentId;
+  final Content content;
+  final bool isAuthed;
+  const _FlixscopeFansSaySection({
+    required this.contentId,
+    required this.content,
+    required this.isAuthed,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final quickTakesAsync = ref.watch(quickTakesByContentProvider(contentId));
+    final quickTakes = quickTakesAsync.valueOrNull ?? [];
+    final user = ref.watch(currentUserProvider);
+
+    return _Section(
+      title: 'FLIXSCOPE FANS SAY',
+      child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-        child: Text(
-          l10n.fansSayNotEnough,
-          style:
-              const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-        ),
-      );
-    }
-    final s = stats!;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(14),
-        ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _Line(
-              icon: Icons.check_circle_outline,
-              text: l10n.fansSayCompletion(s.completionRate),
+            if (quickTakes.isEmpty)
+              const Text(
+                'No fan reactions yet. Be the first!',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
+            for (final qt in quickTakes.take(3)) ...[
+              _QuickTakeCard(quickTake: qt, currentUserId: user?.id),
+              const SizedBox(height: 8),
+            ],
+            if (quickTakes.length > 3)
+              GestureDetector(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => _ExpandedQuickTakesScreen(
+                      contentId: contentId,
+                      contentTitle: content.title,
+                    ),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'See all ${quickTakes.length} fan reactions →',
+                    style: const TextStyle(
+                      color: AppColors.accent,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 12),
+            // Write quick take button
+            if (isAuthed)
+              _WriteQuickTakeButton(
+                content: content,
+                userId: user!.id,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickTakeCard extends ConsumerWidget {
+  final qt.QuickTake quickTake;
+  final String? currentUserId;
+  const _QuickTakeCard({required this.quickTake, this.currentUserId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isOwn = currentUserId == quickTake.userId;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            quickTake.body,
+            style: const TextStyle(
+                fontSize: 14, height: 1.35, color: AppColors.textPrimary),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              // Thumbs up
+              GestureDetector(
+                onTap: currentUserId == null
+                    ? null
+                    : () async {
+                        await voteQuickTake(
+                          quickTakeId: quickTake.id,
+                          userId: currentUserId!,
+                          vote: 1,
+                          currentVote: quickTake.myVote,
+                        );
+                        ref.invalidate(
+                            quickTakesByContentProvider(quickTake.contentId));
+                      },
+                child: Row(
+                  children: [
+                    Icon(
+                      quickTake.myVote == 1
+                          ? Icons.thumb_up
+                          : Icons.thumb_up_outlined,
+                      size: 14,
+                      color: quickTake.myVote == 1
+                          ? AppColors.accent
+                          : AppColors.textMuted,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${quickTake.thumbsUp}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: quickTake.myVote == 1
+                            ? AppColors.accent
+                            : AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Thumbs down
+              GestureDetector(
+                onTap: currentUserId == null
+                    ? null
+                    : () async {
+                        await voteQuickTake(
+                          quickTakeId: quickTake.id,
+                          userId: currentUserId!,
+                          vote: -1,
+                          currentVote: quickTake.myVote,
+                        );
+                        ref.invalidate(
+                            quickTakesByContentProvider(quickTake.contentId));
+                      },
+                child: Row(
+                  children: [
+                    Icon(
+                      quickTake.myVote == -1
+                          ? Icons.thumb_down
+                          : Icons.thumb_down_outlined,
+                      size: 14,
+                      color: quickTake.myVote == -1
+                          ? const Color(0xFFE5484D)
+                          : AppColors.textMuted,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${quickTake.thumbsDown}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: quickTake.myVote == -1
+                            ? const Color(0xFFE5484D)
+                            : AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              if (isOwn)
+                GestureDetector(
+                  onTap: () async {
+                    final ok = await deleteQuickTake(
+                        quickTakeId: quickTake.id);
+                    if (ok) {
+                      ref.invalidate(
+                          quickTakesByContentProvider(quickTake.contentId));
+                    }
+                  },
+                  child: const Icon(Icons.delete_outline,
+                      size: 14, color: Color(0xFFE5484D)),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Write Quick Take button — rate limited (free: 1/day, premium: unlimited)
+// ---------------------------------------------------------------------------
+
+class _WriteQuickTakeButton extends ConsumerWidget {
+  final Content content;
+  final String userId;
+  const _WriteQuickTakeButton({required this.content, required this.userId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final todayCountAsync = ref.watch(quickTakesTodayCountProvider);
+    final todayCount = todayCountAsync.valueOrNull ?? 0;
+    // TODO: check premium status. For now, free = 1/day.
+    final isPremium = false;
+    final canPost = isPremium || todayCount < 1;
+
+    return InkWell(
+      onTap: canPost
+          ? () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: AppColors.background,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                builder: (_) => _QuickTakeComposeSheet(
+                  content: content,
+                  userId: userId,
+                ),
+              )
+          : null,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: canPost
+              ? AppColors.accent.withOpacity(0.12)
+              : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: canPost
+                ? AppColors.accent.withOpacity(0.4)
+                : Colors.white.withOpacity(0.1),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.chat_bubble_outline,
+              size: 16,
+              color: canPost ? AppColors.accent : AppColors.textMuted,
             ),
-            const SizedBox(height: 8),
-            _Line(
-              icon: Icons.thumb_up_outlined,
-              text: l10n.fansSayWorth(s.worthMyTimePct),
-            ),
-            const SizedBox(height: 8),
-            _Line(
-              icon: Icons.star_outline,
-              text: l10n.fansSayRating(s.avgRating.toStringAsFixed(1)),
-            ),
-            const SizedBox(height: 10),
+            const SizedBox(width: 8),
             Text(
-              l10n.fansSaySample(s.sampleSize),
-              style:
-                  const TextStyle(color: AppColors.textMuted, fontSize: 11),
+              canPost
+                  ? 'Share your quick take'
+                  : 'Quick take limit reached (1/day)',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: canPost ? AppColors.accent : AppColors.textMuted,
+              ),
             ),
           ],
         ),
@@ -477,101 +838,190 @@ class _FansSayBlock extends StatelessWidget {
   }
 }
 
-class _Line extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  const _Line({required this.icon, required this.text});
+// ---------------------------------------------------------------------------
+// Quick Take compose sheet (250 chars, no verdict)
+// ---------------------------------------------------------------------------
+
+class _QuickTakeComposeSheet extends ConsumerStatefulWidget {
+  final Content content;
+  final String userId;
+  const _QuickTakeComposeSheet({
+    required this.content,
+    required this.userId,
+  });
+
   @override
-  Widget build(BuildContext context) => Row(
-        children: [
-          Icon(icon, size: 18, color: AppColors.textSecondary),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(fontSize: 14),
-            ),
-          ),
-        ],
-      );
+  ConsumerState<_QuickTakeComposeSheet> createState() =>
+      _QuickTakeComposeSheetState();
 }
 
-// ---------------------------------------------------------------------------
-// Quick takes list
-// ---------------------------------------------------------------------------
-
-class _QuickTakesBlock extends StatelessWidget {
-  final List<QuickTake> takes;
-  final AppLocalizations l10n;
-  const _QuickTakesBlock({required this.takes, required this.l10n});
+class _QuickTakeComposeSheetState
+    extends ConsumerState<_QuickTakeComposeSheet> {
+  final _controller = TextEditingController();
+  bool _submitting = false;
 
   @override
-  Widget build(BuildContext context) {
-    if (takes.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-        child: Text(
-          l10n.contentNoTakes,
-          style:
-              const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final body = _controller.text.trim();
+    if (body.isEmpty) return;
+    setState(() => _submitting = true);
+
+    final tmdbId = int.tryParse(widget.content.id);
+    if (tmdbId == null) {
+      setState(() => _submitting = false);
+      return;
+    }
+
+    final ok = await submitQuickTake(
+      userId: widget.userId,
+      contentId: tmdbId,
+      body: body,
+    );
+
+    if (!mounted) return;
+    setState(() => _submitting = false);
+
+    if (ok) {
+      ref.invalidate(quickTakesByContentProvider(widget.content.id));
+      ref.invalidate(quickTakesTodayCountProvider);
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Quick take shared!'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to share. Try again.'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
         ),
       );
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final t in takes) ...[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
               decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        t.alias,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.accent,
-                          fontSize: 13,
-                        ),
-                      ),
-                      const Spacer(),
-                      if (t.rating != null)
-                        Row(
-                          children: [
-                            const Icon(Icons.star,
-                                size: 14, color: AppColors.scoreGood),
-                            const SizedBox(width: 3),
-                            Text(
-                              '${t.rating}',
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600),
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    t.body,
-                    style: const TextStyle(
-                        fontSize: 14, height: 1.35, color: AppColors.textPrimary),
-                  ),
-                ],
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-            const SizedBox(height: 8),
-          ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Quick take on "${widget.content.title}"',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Short reaction — 250 chars max',
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _controller,
+            maxLines: 3,
+            maxLength: 250,
+            style: const TextStyle(fontSize: 14),
+            decoration: InputDecoration(
+              hintText: 'What did you think?',
+              hintStyle: const TextStyle(color: AppColors.textMuted),
+              filled: true,
+              fillColor: AppColors.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.all(14),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _submitting ? null : _submit,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                textStyle:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              ),
+              child: _submitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.black))
+                  : const Text('Share Quick Take'),
+            ),
+          ),
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Expanded Quick Takes screen (all fan reactions for a content)
+// ---------------------------------------------------------------------------
+
+class _ExpandedQuickTakesScreen extends ConsumerWidget {
+  final String contentId;
+  final String contentTitle;
+  const _ExpandedQuickTakesScreen({
+    required this.contentId,
+    required this.contentTitle,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final quickTakesAsync = ref.watch(quickTakesByContentProvider(contentId));
+    final quickTakes = quickTakesAsync.valueOrNull ?? [];
+    final user = ref.watch(currentUserProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Fans Say — $contentTitle'),
+      ),
+      body: quickTakes.isEmpty
+          ? const Center(
+              child: Text(
+                'No fan reactions yet.',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+            )
+          : ListView.separated(
+              padding: const EdgeInsets.all(20),
+              itemCount: quickTakes.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (_, i) => _QuickTakeCard(
+                quickTake: quickTakes[i],
+                currentUserId: user?.id,
+              ),
+            ),
     );
   }
 }
@@ -676,53 +1126,99 @@ class _ActionBtn extends StatelessWidget {
 // Write Take button + bottom sheet (only visible for creators)
 // ---------------------------------------------------------------------------
 
-class _WriteTakeButton extends StatelessWidget {
+/// Shows "Write a Take" if no take exists for this content,
+/// or "Edit Your Take" if the creator already reviewed this title.
+class _CreatorTakeAction extends ConsumerWidget {
   final Creator creator;
   final Content content;
-  const _WriteTakeButton({required this.creator, required this.content});
+  const _CreatorTakeAction({required this.creator, required this.content});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final takesAsync = ref.watch(takesByCreatorProvider(creator.id));
+    final takes = takesAsync.valueOrNull ?? [];
+    final existingTake = takes
+        .where((t) => t.contentId == content.id)
+        .firstOrNull;
+
+    final hasExisting = existingTake != null;
+    final canEdit = hasExisting && existingTake.canEdit;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: InkWell(
-        onTap: () => showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: AppColors.background,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          builder: (_) => _WriteTakeSheet(
-            creator: creator,
-            content: content,
-          ),
-        ),
+        onTap: hasExisting
+            ? (canEdit
+                ? () => showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: AppColors.background,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.vertical(top: Radius.circular(20)),
+                      ),
+                      builder: (_) => _WriteTakeSheet(
+                        creator: creator,
+                        content: content,
+                        existingTake: existingTake,
+                      ),
+                    )
+                : null) // disabled — no edits remaining
+            : () => showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: AppColors.background,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                  builder: (_) => _WriteTakeSheet(
+                    creator: creator,
+                    content: content,
+                  ),
+                ),
         borderRadius: BorderRadius.circular(12),
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [
-                AppColors.accent.withOpacity(0.2),
-                AppColors.accent.withOpacity(0.08),
+              colors: hasExisting
+                  ? [
+                      Colors.white.withOpacity(0.08),
+                      Colors.white.withOpacity(0.04),
+                    ]
+                  : [
+                      AppColors.accent.withOpacity(0.2),
+                      AppColors.accent.withOpacity(0.08),
               ],
             ),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.accent.withOpacity(0.5)),
+            border: Border.all(
+              color: hasExisting
+                  ? Colors.white.withOpacity(0.15)
+                  : AppColors.accent.withOpacity(0.5),
+            ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.edit_note, size: 20, color: AppColors.accent),
+              Icon(
+                hasExisting ? Icons.edit_outlined : Icons.edit_note,
+                size: 20,
+                color: hasExisting ? AppColors.textSecondary : AppColors.accent,
+              ),
               const SizedBox(width: 8),
               Text(
-                'Write a Take as ${creator.alias}',
-                style: const TextStyle(
+                hasExisting
+                    ? (canEdit
+                        ? 'Edit Your Take (${existingTake.editsRemaining} left)'
+                        : 'Your Take Published (no edits left)')
+                    : 'Write a Take as ${creator.alias}',
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.accent,
+                  color: hasExisting ? AppColors.textSecondary : AppColors.accent,
                 ),
               ),
             ],
@@ -733,19 +1229,42 @@ class _WriteTakeButton extends StatelessWidget {
   }
 }
 
-class _WriteTakeSheet extends StatefulWidget {
+class _WriteTakeSheet extends ConsumerStatefulWidget {
   final Creator creator;
   final Content content;
-  const _WriteTakeSheet({required this.creator, required this.content});
+
+  /// When non-null we are editing an existing take instead of creating one.
+  final CreatorTake? existingTake;
+
+  const _WriteTakeSheet({
+    required this.creator,
+    required this.content,
+    this.existingTake,
+  });
 
   @override
-  State<_WriteTakeSheet> createState() => _WriteTakeSheetState();
+  ConsumerState<_WriteTakeSheet> createState() => _WriteTakeSheetState();
 }
 
-class _WriteTakeSheetState extends State<_WriteTakeSheet> {
+class _WriteTakeSheetState extends ConsumerState<_WriteTakeSheet> {
   final _controller = TextEditingController();
   String _verdict = 'worth_it';
   bool _submitting = false;
+
+  bool get _isEditing => widget.existingTake != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existingTake;
+    if (existing != null) {
+      _controller.text = existing.body;
+      _verdict = switch (existing.verdict) {
+        CreatorVerdict.worthIt => 'worth_it',
+        CreatorVerdict.skipIt => 'skip_it',
+      };
+    }
+  }
 
   @override
   void dispose() {
@@ -759,37 +1278,52 @@ class _WriteTakeSheetState extends State<_WriteTakeSheet> {
 
     setState(() => _submitting = true);
 
-    final tmdbId = int.tryParse(widget.content.id);
-    if (tmdbId == null) {
-      setState(() => _submitting = false);
-      return;
+    bool ok;
+    if (_isEditing) {
+      ok = await updateTake(
+        takeId: widget.existingTake!.id,
+        verdict: _verdict,
+        body: body,
+        currentEditCount: widget.existingTake!.editCount,
+      );
+    } else {
+      final tmdbId = int.tryParse(widget.content.id);
+      if (tmdbId == null) {
+        setState(() => _submitting = false);
+        return;
+      }
+      ok = await submitTake(
+        creatorId: widget.creator.id,
+        contentId: tmdbId,
+        verdict: _verdict,
+        body: body,
+      );
     }
-
-    final ok = await submitTake(
-      creatorId: widget.creator.id,
-      contentId: tmdbId,
-      verdict: _verdict,
-      body: body,
-    );
 
     if (!mounted) return;
     setState(() => _submitting = false);
 
     if (ok) {
+      // Invalidate takes providers so the change shows immediately.
+      ref.invalidate(latestTakesProvider);
+      ref.invalidate(takesByCreatorProvider(widget.creator.id));
+      ref.invalidate(featuredSkipProvider);
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Take published!'),
+        SnackBar(
+          content: Text(_isEditing ? 'Take updated!' : 'Take published!'),
           behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 2),
+          duration: const Duration(seconds: 2),
         ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to publish. Try again.'),
+        SnackBar(
+          content: Text(_isEditing && widget.existingTake!.editCount >= 2
+              ? 'No edits remaining.'
+              : 'Failed to save. Try again.'),
           behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 2),
+          duration: const Duration(seconds: 2),
         ),
       );
     }
@@ -818,7 +1352,9 @@ class _WriteTakeSheetState extends State<_WriteTakeSheet> {
           const SizedBox(height: 16),
           // Title
           Text(
-            'Take on "${widget.content.title}"',
+            _isEditing
+                ? 'Edit take on "${widget.content.title}"'
+                : 'Take on "${widget.content.title}"',
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
@@ -826,10 +1362,14 @@ class _WriteTakeSheetState extends State<_WriteTakeSheet> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Posting as ${widget.creator.alias}',
-            style: const TextStyle(
+            _isEditing
+                ? '${widget.existingTake!.editsRemaining} edit${widget.existingTake!.editsRemaining == 1 ? '' : 's'} remaining'
+                : 'Posting as ${widget.creator.alias}',
+            style: TextStyle(
               fontSize: 12,
-              color: AppColors.textSecondary,
+              color: _isEditing && widget.existingTake!.editsRemaining <= 1
+                  ? const Color(0xFFE5484D)
+                  : AppColors.textSecondary,
             ),
           ),
           const SizedBox(height: 16),
@@ -850,14 +1390,6 @@ class _WriteTakeSheetState extends State<_WriteTakeSheet> {
                 color: const Color(0xFFE5484D),
                 selected: _verdict == 'skip_it',
                 onTap: () => setState(() => _verdict = 'skip_it'),
-              ),
-              const SizedBox(width: 8),
-              _VerdictChip(
-                label: 'Quick Take',
-                icon: Icons.chat_bubble_outline,
-                color: Colors.white70,
-                selected: _verdict == 'quick_take',
-                onTap: () => setState(() => _verdict = 'quick_take'),
               ),
             ],
           ),
@@ -907,7 +1439,7 @@ class _WriteTakeSheetState extends State<_WriteTakeSheet> {
                         color: Colors.black,
                       ),
                     )
-                  : const Text('Publish Take'),
+                  : Text(_isEditing ? 'Save Edit' : 'Publish Take'),
             ),
           ),
         ],
@@ -971,34 +1503,52 @@ class _PlatformChips extends StatelessWidget {
   final Content content;
   const _PlatformChips({required this.content});
 
-  Future<void> _openDeepLink(BuildContext context, String platform) async {
-    final link = content.platformDeepLinks[platform];
-    if (link == null || link.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('No direct link available for $platform'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
+  /// Build a search URL for each streaming platform.
+  /// This opens the platform's app (if installed) or website with a search
+  /// for the title — no third-party API needed.
+  static String? _searchUrl(String platform, String title) {
+    final q = Uri.encodeComponent(title);
+    return switch (platform.toLowerCase()) {
+      'netflix'       => 'https://www.netflix.com/search?q=$q',
+      'disney plus' || 'disney+' => 'https://www.disneyplus.com/search/$q',
+      'max'           => 'https://play.max.com/search?q=$q',
+      'prime video' || 'amazon prime video' => 'https://www.primevideo.com/search?phrase=$q',
+      'apple tv plus' || 'apple tv+' => 'https://tv.apple.com/search?term=$q',
+      'hulu'          => 'https://www.hulu.com/search?q=$q',
+      'paramount plus' || 'paramount+' => 'https://www.paramountplus.com/search?q=$q',
+      'crunchyroll'   => 'https://www.crunchyroll.com/search?q=$q',
+      'peacock'       => 'https://www.peacocktv.com/search?q=$q',
+      'mubi'          => 'https://mubi.com/en/search?query=$q',
+      'tubi'          => 'https://tubitv.com/search/$q',
+      'vix'           => 'https://www.vix.com/es/buscar?q=$q',
+      _ => null,
+    };
+  }
+
+  Future<void> _openPlatform(BuildContext context, String platform) async {
+    final url = _searchUrl(platform, content.title);
+    if (url == null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No link available for $platform'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
       return;
     }
-    final uri = Uri.parse(link);
-    if (await canLaunchUrl(uri)) {
+    final uri = Uri.parse(url);
+    try {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      // Fallback: try opening anyway (some custom schemes won't report
-      // canLaunch but still work).
-      try {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } catch (_) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Could not open $platform'),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not open $platform'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
       }
     }
   }
@@ -1013,20 +1563,16 @@ class _PlatformChips extends StatelessWidget {
         children: [
           for (final p in content.availablePlatforms)
             InkWell(
-              onTap: () => _openDeepLink(context, p),
+              onTap: () => _openPlatform(context, p),
               borderRadius: BorderRadius.circular(20),
               child: Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: content.platformDeepLinks.containsKey(p)
-                      ? AppColors.accent.withOpacity(0.15)
-                      : AppColors.surfaceElevated,
+                  color: AppColors.accent.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(20),
-                  border: content.platformDeepLinks.containsKey(p)
-                      ? Border.all(
-                          color: AppColors.accent.withOpacity(0.4), width: 1)
-                      : null,
+                  border: Border.all(
+                      color: AppColors.accent.withOpacity(0.4), width: 1),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1036,11 +1582,9 @@ class _PlatformChips extends StatelessWidget {
                       style: const TextStyle(
                           fontSize: 13, fontWeight: FontWeight.w600),
                     ),
-                    if (content.platformDeepLinks.containsKey(p)) ...[
-                      const SizedBox(width: 4),
-                      const Icon(Icons.open_in_new,
-                          size: 12, color: AppColors.accent),
-                    ],
+                    const SizedBox(width: 4),
+                    const Icon(Icons.open_in_new,
+                        size: 12, color: AppColors.accent),
                   ],
                 ),
               ),

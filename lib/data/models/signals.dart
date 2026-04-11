@@ -35,28 +35,18 @@ class FansSayStats {
   bool get hasEnoughSignal => sampleSize >= 50;
 }
 
-/// A short user opinion, ≤230 chars. Anchored to a single Content.
-/// Shown in the Content detail as a list, never as a social feed.
-class QuickTake {
+/// Legacy mock quick take — replaced by `quick_take.dart` model.
+/// Kept only for mock data compatibility during migration.
+class MockQuickTake {
   final String id;
   final String contentId;
-
-  /// Public alias (separate from the user's real identity / email).
   final String alias;
-
-  /// The take body. Must be ≤230 chars.
   final String body;
-
-  /// Rating the user gave at the time of writing (nullable — can write
-  /// a take without rating).
   final int? rating;
-
-  /// Whether the user said it was worth their time.
   final bool? worthMyTime;
-
   final DateTime createdAt;
 
-  const QuickTake({
+  const MockQuickTake({
     required this.id,
     required this.contentId,
     required this.alias,

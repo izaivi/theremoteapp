@@ -409,17 +409,14 @@ class _TakeCard extends ConsumerWidget {
     final verdictColor = switch (take.verdict) {
       CreatorVerdict.worthIt => AppColors.accent,
       CreatorVerdict.skipIt => const Color(0xFFE5484D),
-      CreatorVerdict.quickTake => Colors.white70,
     };
     final verdictLabel = switch (take.verdict) {
       CreatorVerdict.worthIt => l10n.creatorVerdictWorthIt,
       CreatorVerdict.skipIt => l10n.creatorVerdictSkipIt,
-      CreatorVerdict.quickTake => l10n.creatorVerdictQuickTake,
     };
     final verdictIcon = switch (take.verdict) {
       CreatorVerdict.worthIt => Icons.check_circle_outline,
       CreatorVerdict.skipIt => Icons.do_not_disturb_on_outlined,
-      CreatorVerdict.quickTake => Icons.chat_bubble_outline,
     };
 
     return Container(

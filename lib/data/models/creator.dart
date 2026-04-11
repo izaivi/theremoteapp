@@ -7,14 +7,15 @@
 ///     they hit quality thresholds (not implemented yet — `isCurated = false`
 ///     for now acts as a placeholder).
 ///
-/// A CreatorTake is an opinion a creator has published about a specific
-/// piece of content. The verdict drives the visual treatment:
+/// A CreatorTake is an editorial review by a creator about specific content.
+/// Only two verdicts — creators commit to a clear position:
 ///   - [CreatorVerdict.worthIt]: positive, "watch it".
-///   - [CreatorVerdict.skipIt]: negative, "NOT worth your time" — the
-///     feature card at the top of the Creators screen pulls from these.
-///   - [CreatorVerdict.quickTake]: neutral/mixed commentary.
+///   - [CreatorVerdict.skipIt]: negative, "NOT worth your time".
+///
+/// Quick takes (casual user reactions) are a SEPARATE system — see
+/// `quick_take.dart`.
 
-enum CreatorVerdict { worthIt, skipIt, quickTake }
+enum CreatorVerdict { worthIt, skipIt }
 
 class Creator {
   final String id;
@@ -50,6 +51,7 @@ class CreatorTake {
   final String contentId;
   final CreatorVerdict verdict;
   final String body;
+  final int editCount;
   final DateTime createdAt;
 
   const CreatorTake({
@@ -58,6 +60,13 @@ class CreatorTake {
     required this.contentId,
     required this.verdict,
     required this.body,
+    this.editCount = 0,
     required this.createdAt,
   });
+
+  /// Whether this take can still be edited (max 2 edits).
+  bool get canEdit => editCount < 2;
+
+  /// Remaining edits.
+  int get editsRemaining => 2 - editCount;
 }

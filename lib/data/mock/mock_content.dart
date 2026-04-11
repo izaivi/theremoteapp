@@ -446,9 +446,9 @@ class MockContent {
   // En producción estos vienen de `quick_takes` en Supabase paginados.
   // ---------------------------------------------------------------------------
 
-  static final Map<String, List<QuickTake>> quickTakesByContentId = {
+  static final Map<String, List<MockQuickTake>> quickTakesByContentId = {
     'c-classic-1': [
-      QuickTake(
+      MockQuickTake(
         id: 'qt-1',
         contentId: 'c-classic-1',
         alias: '@lumen_22',
@@ -458,7 +458,7 @@ class MockContent {
         worthMyTime: true,
         createdAt: DateTime(2026, 3, 19),
       ),
-      QuickTake(
+      MockQuickTake(
         id: 'qt-2',
         contentId: 'c-classic-1',
         alias: '@noirhead',
@@ -469,7 +469,7 @@ class MockContent {
       ),
     ],
     'c-2': [
-      QuickTake(
+      MockQuickTake(
         id: 'qt-3',
         contentId: 'c-2',
         alias: '@midnight_oil',
@@ -481,7 +481,7 @@ class MockContent {
       ),
     ],
     'c-8': [
-      QuickTake(
+      MockQuickTake(
         id: 'qt-4',
         contentId: 'c-8',
         alias: '@one_more_film',
@@ -494,7 +494,7 @@ class MockContent {
     ],
   };
 
-  static List<QuickTake> quickTakesFor(String contentId) =>
+  static List<MockQuickTake> quickTakesFor(String contentId) =>
       quickTakesByContentId[contentId] ?? const [];
 
   // ---------------------------------------------------------------------------

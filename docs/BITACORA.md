@@ -5,6 +5,72 @@ Formato: sección por fecha, bullets cortos.
 
 ---
 
+## 2026-04-11 — Build 5: Take System Redesign + Platform Links + Quick Takes
+
+### Take System — Separación Creator Takes vs Quick Takes
+- **Arquitectura nueva: dos sistemas independientes.**
+  - **Creator Takes**: solo creators registrados. Verdict obligatorio (Worth It / Skip It). 500 chars. Editable (max 2 edits). Sin límite diario. Se muestran en "CREATOR TAKES" en la ficha del contenido.
+  - **Quick Takes**: cualquier usuario autenticado. Sin verdict. 250 chars. No editable (borrar y rehacer). Free: 1/día. Premium: ilimitado. Votación thumbs up/down. Se muestran en "FLIXSCOPE FANS SAY".
+- **Estrategia freemium**: 1 quick take gratis al día crea engagement + dopamina social de los deditos → empuja naturalmente al premium para quick takes ilimitados.
+- **Tablas Supabase**: `quick_takes` (user_id, content_id, body, thumbs_up, thumbs_down) + `quick_take_votes` (quick_take_id, user_id, vote). RLS completa para CRUD.
+- **`CreatorVerdict.quickTake` eliminado** del enum — creators solo tienen `worthIt` y `skipIt`. Limpieza en: `creator.dart`, `creators_provider.dart`, `creators_screen.dart`, `creator_detail_screen.dart`, `content_screen.dart`.
+- **Bloqueo de duplicados**: un creator no puede hacer dos takes en el mismo film. Después de publicar, el botón cambia a "Edit Your Take (X left)".
+- **Popularidad de creators**: takes en la ficha del contenido se ordenan por `followers_count` del creator (más popular primero), luego por fecha.
+
+### Ficha de Contenido — Rediseño de secciones
+- **Nuevo orden**: Synopsis → CREATOR TAKES → FLIXSCOPE FANS SAY → AVAILABLE ON.
+- **CREATOR TAKES**: data real de Supabase. Muestra hasta 3 takes con badge de verdict y alias del creator. Tap en el título → navega al tab Creators. "See all creator takes →" si hay más de 3.
+- **FLIXSCOPE FANS SAY**: quick takes reales con thumbs up/down. Tap en cada dedito vota. Botón "Share your quick take" abre compose sheet (250 chars). Pantalla expandida si hay >3 takes. Bote de basura visible en tus propios takes.
+- **Secciones mock eliminadas**: `_FansSayBlock` y `_QuickTakesBlock` reemplazados por widgets con data real. Import de `mock_content.dart` y `signals.dart` removido del content_screen.
+
+### Platform Deep Links — Reescritura completa
+- **Eliminada dependencia de Watchmode/RapidAPI para deep links.** La app ya no usa el campo `deep_link` de `content_availability`.
+- **Nuevo sistema: URLs de búsqueda por plataforma.** Cada chip genera `netflix.com/search?q=Título`, `play.max.com/search?q=Título`, etc. Funciona para: Netflix, Disney+, Max, Prime Video, Apple TV+, Hulu, Paramount+, Crunchyroll, Peacock, Mubi, Tubi, Vix.
+- **Abre la app nativa** si está instalada (iOS universal links) o el browser como fallback.
+- **Todos los chips ahora se ven activos** (estilo morado con flecha) porque todos tienen URL funcional.
+
+### Creator Profile — Edit/Delete funcional
+- **Edit de takes funciona**: bottom sheet pre-llena verdict y body, muestra "X edit(s) remaining", botón "Save Edit". Después de 2 edits se deshabilita.
+- **Delete de takes funciona**: confirmación con AlertDialog, invalidación de providers, refresco inmediato.
+- **"My Takes" en perfil propio**: cuando ves tu propio perfil de creator, el botón Follow se oculta, el título cambia a "My Takes", cada take muestra controles de editar (lápiz) y borrar (trash rojo).
+- **RLS DELETE policy**: `takes_delete_own` existía pero no estaba creada — verificada y confirmada.
+
+### Bugs corregidos
+- **Vault/ratings data loss en sign-out→sign-in (de ayer)**: `pullRatings` y `pullVault` usaban `as String` para `content_id` bigint. Supabase devuelve `int`, cast fallaba silenciosamente en `catch(_)`. Fix: `.toString()`.
+- **Takes no aparecían después de publish**: `FutureProvider` caching. Fix: `ref.invalidate()` en 3 providers de takes después del submit.
+- **Navigator assertion error** al tocar "CREATOR TAKES >" desde content screen: `context.push('/creators')` chocaba con ShellRoute. Fix: cambiar a `context.go('/creators')`.
+
+### Migraciones SQL aplicadas
+- `2026-04-11_takes_edit_count.sql` — `edit_count smallint` con CHECK 0-2 en `creator_takes`.
+- `2026-04-11_quick_takes.sql` — Tablas `quick_takes` + `quick_take_votes` con RLS completa.
+- Cleanup: `DELETE FROM creator_takes WHERE verdict = 'quick_take'`.
+
+### Debug logging agregado
+- `currentCreatorProvider`: logs de user_id y query results.
+- `submitTake`, `updateTake`, `deleteTake`, `submitQuickTake`, `voteQuickTake`: logs de operación y errores.
+
+### Decisiones de producto
+- **Quick Take 1/día para free users**: crea engagement sin excluir. Deditos generan dopamina social → incentivo natural al premium.
+- **Premium = quick takes ilimitidos + editing** (Build 6, zona de pago).
+- **5★ ≠ ❤️**: el corazón es señal independiente. "Criterio humano nerd".
+- **Onboarding quiz**: no es bug que no aparezca al abrir simulador — SharedPreferences persisten entre runs. En instalación limpia sí aparece.
+
+### Siguiente: Remoty (Companion)
+- **Renaming**: IA tab → REMOTY. Chat IA → ASK REMOTY.
+- **Basado en patrón de Kireya** (app de maquillaje de Vivi): detección de intención + data local + catálogo. Sin API de IA.
+- **Bilingüe**: inglés y español.
+- **Mascota**: Remoty con poses (estudiando, viendo algo, escuchándote).
+- **Botones**: guía de uso + borrar conversación.
+
+### Pendientes Build 6 (zona premium)
+- Payment integration (Stripe / RevenueCat).
+- Quick takes ilimitados para premium.
+- Quick take editing para premium.
+- Account linking Apple + Google.
+- Enriquecer 72 títulos curados con OMDb scores.
+
+---
+
 ## 2026-04-10 — Builds 3–4 Feedback + Catálogo curado + Vault redesign
 
 ### Build 3 Feedback (7 items) — resuelto

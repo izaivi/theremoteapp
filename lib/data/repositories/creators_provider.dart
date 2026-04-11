@@ -96,11 +96,19 @@ final currentCreatorProvider = FutureProvider<Creator?>((ref) async {
   if (!SupabaseConfig.isConfigured) return null;
 
   final user = ref.watch(currentUserProvider);
-  if (user == null) return null;
+  if (user == null) {
+    // ignore: avoid_print
+    print('[currentCreatorProvider] no user logged in');
+    return null;
+  }
 
+  // ignore: avoid_print
+  print('[currentCreatorProvider] querying creators for user_id=${user.id}');
   final sb = Supabase.instance.client;
   final rows =
       await sb.from('creators').select().eq('user_id', user.id).limit(1);
+  // ignore: avoid_print
+  print('[currentCreatorProvider] found ${rows.length} rows');
   if (rows.isEmpty) return null;
   return _mapCreator(rows.first);
 });
@@ -121,7 +129,55 @@ Future<bool> submitTake({
       'body': body,
     });
     return true;
-  } catch (_) {
+  } catch (e) {
+    // Log the actual error so silent failures become visible.
+    // ignore: avoid_print
+    print('[submitTake] ERROR: $e');
+    return false;
+  }
+}
+
+/// Edit an existing take. Increments edit_count. Returns true on success.
+/// Fails if edit_count is already >= 2.
+Future<bool> updateTake({
+  required String takeId,
+  required String verdict,
+  required String body,
+  required int currentEditCount,
+}) async {
+  if (currentEditCount >= 2) return false;
+  try {
+    final sb = Supabase.instance.client;
+    // ignore: avoid_print
+    print('[updateTake] updating take=$takeId, editCount=$currentEditCount→${currentEditCount + 1}');
+    await sb.from('creator_takes').update({
+      'verdict': verdict,
+      'body': body,
+      'edit_count': currentEditCount + 1,
+    }).eq('id', takeId);
+    // ignore: avoid_print
+    print('[updateTake] success');
+    return true;
+  } catch (e) {
+    // ignore: avoid_print
+    print('[updateTake] ERROR: $e');
+    return false;
+  }
+}
+
+/// Delete a take entirely. Returns true on success.
+Future<bool> deleteTake({required String takeId}) async {
+  try {
+    final sb = Supabase.instance.client;
+    // ignore: avoid_print
+    print('[deleteTake] deleting take=$takeId');
+    await sb.from('creator_takes').delete().eq('id', takeId);
+    // ignore: avoid_print
+    print('[deleteTake] success');
+    return true;
+  } catch (e) {
+    // ignore: avoid_print
+    print('[deleteTake] ERROR: $e');
     return false;
   }
 }
@@ -143,11 +199,10 @@ Creator _mapCreator(Map<String, dynamic> r) {
 }
 
 CreatorTake _mapTake(Map<String, dynamic> r) {
-  final verdictStr = r['verdict'] as String? ?? 'quick_take';
+  final verdictStr = r['verdict'] as String? ?? 'worth_it';
   final verdict = switch (verdictStr) {
-    'worth_it' => CreatorVerdict.worthIt,
     'skip_it' => CreatorVerdict.skipIt,
-    _ => CreatorVerdict.quickTake,
+    _ => CreatorVerdict.worthIt,
   };
   return CreatorTake(
     id: r['id'] as String,
@@ -155,6 +210,7 @@ CreatorTake _mapTake(Map<String, dynamic> r) {
     contentId: (r['content_id'] as int).toString(),
     verdict: verdict,
     body: r['body'] as String? ?? '',
+    editCount: r['edit_count'] as int? ?? 0,
     createdAt: DateTime.tryParse(r['created_at'] as String? ?? '') ??
         DateTime.now(),
   );
