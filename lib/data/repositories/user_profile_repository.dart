@@ -233,3 +233,23 @@ final userProfileProvider =
     ref.watch(supabaseSyncProvider),
   ),
 );
+
+/// Whether the current user has pro-level access.
+///
+/// True if:
+///   - `tier == 'pro'` (paid subscription), OR
+///   - The user is a verified creator (creators get premium as a perk).
+///
+/// Usage: `ref.watch(isProProvider)` replaces `profile.tier == 'pro'`.
+/// Defined here so every screen can import it from one place.
+/// The actual creator check is injected by creators_provider.dart
+/// via [isCreatorOverride].
+final isProProvider = Provider<bool>((ref) {
+  final profile = ref.watch(userProfileProvider);
+  if (profile.tier == 'pro') return true;
+  return ref.watch(isCreatorOverride);
+});
+
+/// Set to `true` by creators_provider when the logged-in user has a
+/// creator profile. Defaults to false.
+final isCreatorOverride = StateProvider<bool>((ref) => false);

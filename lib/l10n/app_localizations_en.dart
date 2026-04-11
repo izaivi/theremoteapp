@@ -189,7 +189,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tabDiscover => 'Discover';
 
   @override
-  String get tabAi => 'AI';
+  String get tabAi => 'Remoty';
 
   @override
   String get tabCreators => 'Creators';
@@ -496,10 +496,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get splashCta => 'Start';
 
   @override
-  String get chatTitle => 'AI Chat';
+  String get chatTitle => 'Ask Remoty';
 
   @override
-  String get chatTagline => 'Ask me what to watch tonight.';
+  String get chatTagline => 'Your streaming companion.';
 
   @override
   String get chatInputHint => 'What are you in the mood for?';
@@ -508,11 +508,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatSend => 'Send';
 
   @override
-  String get chatEmptyTitle => 'Your watch assistant';
+  String get chatEmptyTitle => 'Hey! I\'m Remoty';
 
   @override
   String get chatEmptyBody =>
-      'Try: \"something short tonight\", \"a prestige series\", or \"what should I skip?\".';
+      'I know the catalog, your vault, and what creators say. Ask me anything about what to watch.';
 
   @override
   String get chatQuickShort => 'Short tonight';
@@ -525,6 +525,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatQuickSkip => 'What should I skip?';
+
+  @override
+  String get chatQuickVault => 'My favorites';
+
+  @override
+  String get chatQuickRanking => 'My best rated';
+
+  @override
+  String get chatQuickCreators => 'Top creator picks';
 
   @override
   String chatQuotaRemaining(int count) {
@@ -543,11 +552,62 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatQuotaExhaustedTitle =>
-      'You’ve used your 5 free questions today';
+      'You’ve used your 10 free questions today';
 
   @override
   String get chatQuotaExhaustedBody =>
-      'Upgrade to Premium for unlimited AI chat and Decision Assistant.';
+      'Upgrade to Premium for unlimited Ask Remoty and Decision Assistant.';
+
+  @override
+  String get chatGuideTitle => 'How to Ask Remoty';
+
+  @override
+  String get chatGuideCategory1Title => 'Mood & Genre';
+
+  @override
+  String get chatGuideCategory1Desc =>
+      'Tell me how you feel or what genre you want — I\'ll find the best match.';
+
+  @override
+  String get chatGuideCategory2Title => 'Favorites & Vault';
+
+  @override
+  String get chatGuideCategory2Desc =>
+      'Ask about your favorites, watchlist, or what you\'ve dismissed.';
+
+  @override
+  String get chatGuideCategory5Title => 'Your Rankings';
+
+  @override
+  String get chatGuideCategory5Desc =>
+      'Check your best or worst star ratings from your vault.';
+
+  @override
+  String get chatGuideCategory3Title => 'Creator Takes';
+
+  @override
+  String get chatGuideCategory3Desc =>
+      'See what trusted creators are recommending or skipping.';
+
+  @override
+  String get chatGuideCategory4Title => 'Platform Search';
+
+  @override
+  String get chatGuideCategory4Desc =>
+      'Ask what\'s good on Netflix, Max, Disney+, or any platform.';
+
+  @override
+  String get chatClearTitle => 'Clear conversation?';
+
+  @override
+  String get chatClearBody =>
+      'This will remove all messages. This action can\'t be undone.';
+
+  @override
+  String get chatClearConfirm => 'Clear';
+
+  @override
+  String get chatClearCancel => 'Cancel';
 
   @override
   String get longQuizTitle => 'Tune your taste';

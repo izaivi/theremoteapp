@@ -188,7 +188,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get tabDiscover => 'Descubrir';
 
   @override
-  String get tabAi => 'IA';
+  String get tabAi => 'Remoty';
 
   @override
   String get tabCreators => 'Creadores';
@@ -495,10 +495,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get splashCta => 'Comenzar';
 
   @override
-  String get chatTitle => 'Chat IA';
+  String get chatTitle => 'Ask Remoty';
 
   @override
-  String get chatTagline => 'Pregúntame qué ver esta noche.';
+  String get chatTagline => 'Tu compañero de streaming.';
 
   @override
   String get chatInputHint => '¿Qué te provoca ver?';
@@ -507,11 +507,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get chatSend => 'Enviar';
 
   @override
-  String get chatEmptyTitle => 'Tu asistente de decisión';
+  String get chatEmptyTitle => '¡Hola! Soy Remoty';
 
   @override
   String get chatEmptyBody =>
-      'Prueba: \"algo corto para esta noche\", \"una serie prestige\" o \"qué me salto\".';
+      'Conozco el catálogo, tu bóveda y lo que dicen los creators. Pregúntame lo que sea sobre qué ver.';
 
   @override
   String get chatQuickShort => 'Corto esta noche';
@@ -524,6 +524,15 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get chatQuickSkip => '¿Qué me salto?';
+
+  @override
+  String get chatQuickVault => 'Mis favoritas';
+
+  @override
+  String get chatQuickRanking => 'Mis mejores ratings';
+
+  @override
+  String get chatQuickCreators => 'Picks de creators';
 
   @override
   String chatQuotaRemaining(int count) {
@@ -541,11 +550,62 @@ class AppLocalizationsEs extends AppLocalizations {
   String get chatQuotaPro => 'Ilimitado';
 
   @override
-  String get chatQuotaExhaustedTitle => 'Usaste tus 5 preguntas gratis de hoy';
+  String get chatQuotaExhaustedTitle => 'Usaste tus 10 preguntas gratis de hoy';
 
   @override
   String get chatQuotaExhaustedBody =>
-      'Actualiza a Premium para chat IA ilimitado y el Decision Assistant.';
+      'Actualiza a Premium para Ask Remoty ilimitado y Decision Assistant.';
+
+  @override
+  String get chatGuideTitle => 'Cómo usar Ask Remoty';
+
+  @override
+  String get chatGuideCategory1Title => 'Mood y Género';
+
+  @override
+  String get chatGuideCategory1Desc =>
+      'Dime cómo te sientes o qué género buscas — te encuentro lo mejor.';
+
+  @override
+  String get chatGuideCategory2Title => 'Favoritas y Bóveda';
+
+  @override
+  String get chatGuideCategory2Desc =>
+      'Pregunta por tus favoritas, watchlist o lo que has descartado.';
+
+  @override
+  String get chatGuideCategory5Title => 'Tus Rankings';
+
+  @override
+  String get chatGuideCategory5Desc =>
+      'Consulta tus mejores o peores ratings con estrellas de tu bóveda.';
+
+  @override
+  String get chatGuideCategory3Title => 'Creator Takes';
+
+  @override
+  String get chatGuideCategory3Desc =>
+      'Mira qué recomiendan o saltan los creators de confianza.';
+
+  @override
+  String get chatGuideCategory4Title => 'Buscar por Plataforma';
+
+  @override
+  String get chatGuideCategory4Desc =>
+      'Pregunta qué hay bueno en Netflix, Max, Disney+ o cualquier plataforma.';
+
+  @override
+  String get chatClearTitle => '¿Borrar conversación?';
+
+  @override
+  String get chatClearBody =>
+      'Se eliminarán todos los mensajes. No se puede deshacer.';
+
+  @override
+  String get chatClearConfirm => 'Borrar';
+
+  @override
+  String get chatClearCancel => 'Cancelar';
 
   @override
   String get longQuizTitle => 'Afina tu gusto';

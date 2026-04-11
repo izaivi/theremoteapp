@@ -425,7 +425,7 @@ abstract class AppLocalizations {
   /// No description provided for @tabAi.
   ///
   /// In en, this message translates to:
-  /// **'AI'**
+  /// **'Remoty'**
   String get tabAi;
 
   /// No description provided for @tabCreators.
@@ -1013,13 +1013,13 @@ abstract class AppLocalizations {
   /// No description provided for @chatTitle.
   ///
   /// In en, this message translates to:
-  /// **'AI Chat'**
+  /// **'Ask Remoty'**
   String get chatTitle;
 
   /// No description provided for @chatTagline.
   ///
   /// In en, this message translates to:
-  /// **'Ask me what to watch tonight.'**
+  /// **'Your streaming companion.'**
   String get chatTagline;
 
   /// No description provided for @chatInputHint.
@@ -1037,13 +1037,13 @@ abstract class AppLocalizations {
   /// No description provided for @chatEmptyTitle.
   ///
   /// In en, this message translates to:
-  /// **'Your watch assistant'**
+  /// **'Hey! I\'m Remoty'**
   String get chatEmptyTitle;
 
   /// No description provided for @chatEmptyBody.
   ///
   /// In en, this message translates to:
-  /// **'Try: \"something short tonight\", \"a prestige series\", or \"what should I skip?\".'**
+  /// **'I know the catalog, your vault, and what creators say. Ask me anything about what to watch.'**
   String get chatEmptyBody;
 
   /// No description provided for @chatQuickShort.
@@ -1070,6 +1070,24 @@ abstract class AppLocalizations {
   /// **'What should I skip?'**
   String get chatQuickSkip;
 
+  /// No description provided for @chatQuickVault.
+  ///
+  /// In en, this message translates to:
+  /// **'My favorites'**
+  String get chatQuickVault;
+
+  /// No description provided for @chatQuickRanking.
+  ///
+  /// In en, this message translates to:
+  /// **'My best rated'**
+  String get chatQuickRanking;
+
+  /// No description provided for @chatQuickCreators.
+  ///
+  /// In en, this message translates to:
+  /// **'Top creator picks'**
+  String get chatQuickCreators;
+
   /// No description provided for @chatQuotaRemaining.
   ///
   /// In en, this message translates to:
@@ -1085,14 +1103,104 @@ abstract class AppLocalizations {
   /// No description provided for @chatQuotaExhaustedTitle.
   ///
   /// In en, this message translates to:
-  /// **'You’ve used your 5 free questions today'**
+  /// **'You’ve used your 10 free questions today'**
   String get chatQuotaExhaustedTitle;
 
   /// No description provided for @chatQuotaExhaustedBody.
   ///
   /// In en, this message translates to:
-  /// **'Upgrade to Premium for unlimited AI chat and Decision Assistant.'**
+  /// **'Upgrade to Premium for unlimited Ask Remoty and Decision Assistant.'**
   String get chatQuotaExhaustedBody;
+
+  /// No description provided for @chatGuideTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'How to Ask Remoty'**
+  String get chatGuideTitle;
+
+  /// No description provided for @chatGuideCategory1Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Mood & Genre'**
+  String get chatGuideCategory1Title;
+
+  /// No description provided for @chatGuideCategory1Desc.
+  ///
+  /// In en, this message translates to:
+  /// **'Tell me how you feel or what genre you want — I\'ll find the best match.'**
+  String get chatGuideCategory1Desc;
+
+  /// No description provided for @chatGuideCategory2Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorites & Vault'**
+  String get chatGuideCategory2Title;
+
+  /// No description provided for @chatGuideCategory2Desc.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask about your favorites, watchlist, or what you\'ve dismissed.'**
+  String get chatGuideCategory2Desc;
+
+  /// No description provided for @chatGuideCategory5Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Rankings'**
+  String get chatGuideCategory5Title;
+
+  /// No description provided for @chatGuideCategory5Desc.
+  ///
+  /// In en, this message translates to:
+  /// **'Check your best or worst star ratings from your vault.'**
+  String get chatGuideCategory5Desc;
+
+  /// No description provided for @chatGuideCategory3Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Creator Takes'**
+  String get chatGuideCategory3Title;
+
+  /// No description provided for @chatGuideCategory3Desc.
+  ///
+  /// In en, this message translates to:
+  /// **'See what trusted creators are recommending or skipping.'**
+  String get chatGuideCategory3Desc;
+
+  /// No description provided for @chatGuideCategory4Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Platform Search'**
+  String get chatGuideCategory4Title;
+
+  /// No description provided for @chatGuideCategory4Desc.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask what\'s good on Netflix, Max, Disney+, or any platform.'**
+  String get chatGuideCategory4Desc;
+
+  /// No description provided for @chatClearTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear conversation?'**
+  String get chatClearTitle;
+
+  /// No description provided for @chatClearBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This will remove all messages. This action can\'t be undone.'**
+  String get chatClearBody;
+
+  /// No description provided for @chatClearConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get chatClearConfirm;
+
+  /// No description provided for @chatClearCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get chatClearCancel;
 
   /// No description provided for @longQuizTitle.
   ///

@@ -1004,13 +1004,40 @@ class _ExpandedQuickTakesScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Fans Say — $contentTitle'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(
+              'assets/mascots/mascot_fanstake.png',
+              width: 28,
+              height: 28,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+            ),
+            const SizedBox(width: 8),
+            Text('Fans Say — $contentTitle'),
+          ],
+        ),
       ),
       body: quickTakes.isEmpty
-          ? const Center(
-              child: Text(
-                'No fan reactions yet.',
-                style: TextStyle(color: AppColors.textSecondary),
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/mascots/mascot_fanstake.png',
+                    width: 100,
+                    height: 100,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'No fan reactions yet.\nBe the first!',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                ],
               ),
             )
           : ListView.separated(

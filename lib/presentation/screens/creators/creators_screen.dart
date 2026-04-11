@@ -39,18 +39,36 @@ class CreatorsScreen extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
         children: [
-          Text(
-            l10n.creatorsTitle,
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.creatorsTitle,
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      l10n.creatorsTagline,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).textTheme.bodySmall?.color,
+                          ),
+                    ),
+                  ],
                 ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            l10n.creatorsTagline,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).textTheme.bodySmall?.color,
-                ),
+              ),
+              Image.asset(
+                'assets/mascots/mascot_following.png',
+                width: 64,
+                height: 64,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ],
           ),
           const SizedBox(height: 20),
 

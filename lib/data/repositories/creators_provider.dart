@@ -7,6 +7,7 @@ import '../models/content.dart';
 import '../models/creator.dart';
 import 'auth_repository.dart';
 import 'catalog_provider.dart';
+import 'user_profile_repository.dart';
 
 /// ------------------------------------------------------------------
 /// Creators provider — reads from Supabase `creators` + `creator_takes`
@@ -99,6 +100,7 @@ final currentCreatorProvider = FutureProvider<Creator?>((ref) async {
   if (user == null) {
     // ignore: avoid_print
     print('[currentCreatorProvider] no user logged in');
+    ref.read(isCreatorOverride.notifier).state = false;
     return null;
   }
 
@@ -109,7 +111,13 @@ final currentCreatorProvider = FutureProvider<Creator?>((ref) async {
       await sb.from('creators').select().eq('user_id', user.id).limit(1);
   // ignore: avoid_print
   print('[currentCreatorProvider] found ${rows.length} rows');
-  if (rows.isEmpty) return null;
+  if (rows.isEmpty) {
+    ref.read(isCreatorOverride.notifier).state = false;
+    return null;
+  }
+
+  // Creators get pro-level access as a perk.
+  ref.read(isCreatorOverride.notifier).state = true;
   return _mapCreator(rows.first);
 });
 

@@ -5,7 +5,27 @@ Formato: sección por fecha, bullets cortos.
 
 ---
 
-## 2026-04-11 — Build 5: Take System Redesign + Platform Links + Quick Takes
+## 2026-04-11 — Build 5: Take System Redesign + Platform Links + Quick Takes + Remoty
+
+### Remoty Companion — IA tab → Ask Remoty
+- **Rebrand completo:** tab inferior pasa de "IA" → "Remoty" con icono `smart_toy`.
+- **Ask Remoty screen:** header con título "Ask Remoty" + tagline "Your streaming companion" / "Tu compañero de streaming".
+- **Dos botones en header:** Guide (❓) abre bottom sheet con categorías de uso + Clear (🗑) borra conversación con confirmación.
+- **Guide sheet:** 4 categorías (Mood & Genre, Your Vault, Creator Takes, Platform Search) con example chips tapeables que disparan la pregunta.
+- **RemotypEngine:** reemplaza MockAiResponder. Motor de intenciones rule-based con 14 intents: greeting, thanks, skip, short, binge, sad, action, sciFi, classic, vault, **ranking**, creators, platform, generic.
+- **Data real de Supabase:** engine recibe catalog, vault (loved/watchlist/notForMe), star ratings, y creator takes desde providers. Ya no usa MockContent para sus respuestas.
+- **Ranking intent (nuevo):** responde a "my best rated", "mis mejores", "5 stars" etc. Muestra títulos con 5 estrellas, o los peor calificados si preguntas por "worst". Summary por nivel de estrellas si no hay 5★.
+- **Cards aleatorias:** vault (loved, watchlist) y ranking muestran 3 cards random cada vez, no siempre las primeras.
+- **Chat persistence:** `_chatMessagesProvider` + `_chatThinkingProvider` (Riverpod StateProvider). La conversación sobrevive cambios de tab (ShellRoute mata KeepAlive, así que Riverpod era la solución).
+- **Creator premium:** `isProProvider` combina `tier=='pro'` OR `isCreatorOverride` (set by `currentCreatorProvider`). Creators verificados tienen acceso ilimitado a Remoty.
+- **Tappable cards:** las cards de recomendación navegan a `/content/$id` con tap.
+- **Quota 5→10:** preguntas gratis diarias incrementadas. L10n strings actualizadas.
+- **Bilingüe EN/ES:** detecta locale del usuario y responde en el idioma correcto.
+- **Mascota Remoty:** avatar circular mascot_ask.png en header y mensajes. mascot_search.png mientras piensa.
+- **Empty state:** mascota grande + "Hey! I'm Remoty" con 7 quick chips (short, binge, sad, skip, favorites, ranking, creators).
+- **Guide sheet:** 5 categorías (Mood & Genre, Favorites & Vault, Your Rankings, Creator Takes, Platform Search) con chips tapeables.
+- **Sin dependencia de API de IA:** todo funciona con keyword matching + catálogo real de Supabase.
+
 
 ### Take System — Separación Creator Takes vs Quick Takes
 - **Arquitectura nueva: dos sistemas independientes.**

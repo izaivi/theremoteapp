@@ -8,12 +8,18 @@ import '../../../core/theme/app_colors.dart';
 import '../../../data/mock/mock_ai_responses.dart';
 import '../../../data/mock/mock_content.dart';
 import '../../../data/models/chat_message.dart';
+import '../../../data/models/content.dart';
+import '../../../data/repositories/catalog_provider.dart';
 import '../../../data/repositories/chat_quota_repository.dart';
+import '../../../data/repositories/creators_provider.dart';
 import '../../../data/repositories/user_profile_repository.dart';
+import '../../../data/repositories/ratings_repository.dart';
+import '../../../data/repositories/vault_repository.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../widgets/paywall_sheet.dart';
 
-/// AI Chat screen.
+/// Ask Remoty — streaming companion powered by the catalog, vault,
+/// and creator takes. Rule-based intent detection, no AI API needed.
 ///
 /// Free users: 5 questions/day (quota tracked in `ChatQuotaRepository`,
 /// resets at local midnight). On exhaustion the input locks and a paywall
@@ -21,7 +27,13 @@ import '../../widgets/paywall_sheet.dart';
 ///
 /// Pro users: unlimited (quota display reads "Unlimited").
 ///
-/// Responses are mocked by `MockAiResponder` until we wire a real model.
+/// Bilingual EN/ES — Remoty detects user locale and responds accordingly.
+
+/// Persists chat messages across tab switches via Riverpod.
+final _chatMessagesProvider =
+    StateProvider<List<ChatMessage>>((ref) => []);
+final _chatThinkingProvider = StateProvider<bool>((ref) => false);
+
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
 
@@ -30,10 +42,8 @@ class ChatScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
-  final List<ChatMessage> _messages = [];
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scroll = ScrollController();
-  bool _thinking = false;
 
   @override
   void dispose() {
@@ -44,12 +54,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Future<void> _send(String rawText) async {
     final text = rawText.trim();
-    if (text.isEmpty || _thinking) return;
+    if (text.isEmpty || ref.read(_chatThinkingProvider)) return;
 
-    final profile = ref.read(userProfileProvider);
-    final isPro = profile.tier == 'pro';
+    final isPro = ref.read(isProProvider);
 
-    // Pro bypasses the quota entirely.
+    // Pro (paid or creator) bypasses the quota entirely.
     if (!isPro) {
       final allowed = await ref.read(chatQuotaProvider.notifier).consume();
       if (!allowed) {
@@ -58,33 +67,56 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     }
 
-    setState(() {
-      _messages.add(ChatMessage(
-        id: 'u-${DateTime.now().microsecondsSinceEpoch}',
-        sender: ChatSender.user,
-        text: text,
-        createdAt: DateTime.now(),
-      ));
-      _controller.clear();
-      _thinking = true;
-    });
+    ref.read(_chatMessagesProvider.notifier).update((msgs) => [
+          ...msgs,
+          ChatMessage(
+            id: 'u-${DateTime.now().microsecondsSinceEpoch}',
+            sender: ChatSender.user,
+            text: text,
+            createdAt: DateTime.now(),
+          ),
+        ]);
+    _controller.clear();
+    ref.read(_chatThinkingProvider.notifier).state = true;
     _scrollToBottom();
 
-    // Simulate latency.
+    // Simulate latency — Remoty "thinks" for a moment.
     await Future<void>.delayed(const Duration(milliseconds: 650));
-    final reply = MockAiResponder.reply(text);
+
+    // Detect locale for bilingual responses.
+    final isSpanish = mounted &&
+        (Localizations.localeOf(context).languageCode == 'es');
+
+    // Build engine with real data from Supabase providers.
+    final catalog =
+        ref.read(catalogProvider).valueOrNull ?? MockContent.catalog;
+    final vault = ref.read(vaultProvider);
+    final takes = ref.read(latestTakesProvider).valueOrNull ?? [];
+
+    final userRatings = ref.read(ratingsProvider);
+
+    final engine = RemotypEngine(
+      catalog: catalog,
+      lovedIds: vault.loved,
+      watchlistIds: vault.watchlist,
+      notForMeIds: vault.notForMe,
+      creatorTakes: takes,
+      ratings: userRatings,
+    );
+    final reply = engine.reply(text, spanish: isSpanish);
 
     if (!mounted) return;
-    setState(() {
-      _messages.add(ChatMessage(
-        id: 'a-${DateTime.now().microsecondsSinceEpoch}',
-        sender: ChatSender.ai,
-        text: reply.text,
-        createdAt: DateTime.now(),
-        recommendedContentIds: reply.contentIds,
-      ));
-      _thinking = false;
-    });
+    ref.read(_chatMessagesProvider.notifier).update((msgs) => [
+          ...msgs,
+          ChatMessage(
+            id: 'a-${DateTime.now().microsecondsSinceEpoch}',
+            sender: ChatSender.ai,
+            text: reply.text,
+            createdAt: DateTime.now(),
+            recommendedContentIds: reply.contentIds,
+          ),
+        ]);
+    ref.read(_chatThinkingProvider.notifier).state = false;
     _scrollToBottom();
   }
 
@@ -99,13 +131,248 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
   }
 
+  Future<void> _clearConversation() async {
+    final l10n = AppLocalizations.of(context)!;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(
+          l10n.chatClearTitle,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        content: Text(
+          l10n.chatClearBody,
+          style: TextStyle(
+            fontSize: 13,
+            color: Theme.of(context).textTheme.bodySmall?.color,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              l10n.chatClearCancel,
+              style: TextStyle(
+                color: Theme.of(context).textTheme.bodySmall?.color,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              l10n.chatClearConfirm,
+              style: const TextStyle(
+                color: Color(0xFFE5484D),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      ref.read(_chatMessagesProvider.notifier).state = [];
+    }
+  }
+
+  void _showGuideSheet() {
+    final l10n = AppLocalizations.of(context)!;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.65,
+        minChildSize: 0.4,
+        maxChildSize: 0.85,
+        builder: (context, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  children: [
+                    ClipOval(
+                      child: Image.asset(
+                        'assets/mascots/mascot_ask.png',
+                        width: 32,
+                        height: 32,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          width: 32,
+                          height: 32,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppColors.surfaceElevated,
+                          ),
+                          child: const Icon(Icons.smart_toy,
+                              size: 18, color: Color(0xFF4F8CFF)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      l10n.chatGuideTitle,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+                  children: [
+                    _guideCategory(
+                      icon: Icons.mood_outlined,
+                      title: l10n.chatGuideCategory1Title,
+                      description: l10n.chatGuideCategory1Desc,
+                      examples: [
+                        l10n.chatQuickShort,
+                        l10n.chatQuickBinge,
+                        l10n.chatQuickSad,
+                      ],
+                    ),
+                    _guideCategory(
+                      icon: Icons.bookmark_outline,
+                      title: l10n.chatGuideCategory2Title,
+                      description: l10n.chatGuideCategory2Desc,
+                      examples: [l10n.chatQuickVault],
+                    ),
+                    _guideCategory(
+                      icon: Icons.star_outline,
+                      title: l10n.chatGuideCategory5Title,
+                      description: l10n.chatGuideCategory5Desc,
+                      examples: [l10n.chatQuickRanking],
+                    ),
+                    _guideCategory(
+                      icon: Icons.movie_filter_outlined,
+                      title: l10n.chatGuideCategory3Title,
+                      description: l10n.chatGuideCategory3Desc,
+                      examples: [l10n.chatQuickCreators],
+                    ),
+                    _guideCategory(
+                      icon: Icons.devices_outlined,
+                      title: l10n.chatGuideCategory4Title,
+                      description: l10n.chatGuideCategory4Desc,
+                      examples: const [
+                        'Netflix picks',
+                        'What\'s on Max?',
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _guideCategory({
+    required IconData icon,
+    required String title,
+    required String description,
+    required List<String> examples,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: const Color(0xFF4F8CFF)),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF4F8CFF),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            description,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white.withOpacity(0.6),
+              height: 1.4,
+            ),
+          ),
+          if (examples.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: examples.map((e) => GestureDetector(
+                onTap: () {
+                  Navigator.of(context).pop(); // close sheet
+                  _send(e);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4F8CFF).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: const Color(0xFF4F8CFF).withOpacity(0.3),
+                    ),
+                  ),
+                  child: Text(
+                    e,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF4F8CFF),
+                    ),
+                  ),
+                ),
+              )).toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final profile = ref.watch(userProfileProvider);
-    final isPro = profile.tier == 'pro';
+    // Trigger creator check — sets isCreatorOverride → isProProvider.
+    ref.watch(currentCreatorProvider);
+    final isPro = ref.watch(isProProvider);
     final quota = ref.watch(chatQuotaProvider);
     final exhausted = !isPro && quota.exhausted;
+    final messages = ref.watch(_chatMessagesProvider);
+    final thinking = ref.watch(_chatThinkingProvider);
 
     return SafeArea(
       child: Column(
@@ -138,32 +405,56 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ],
                   ),
                 ),
-                _QuotaBadge(
-                  label: isPro
-                      ? l10n.chatQuotaPro
-                      : l10n.chatQuotaRemaining(quota.remaining),
-                  isPro: isPro,
-                  exhausted: exhausted,
+                // Remoty avatar
+                ClipOval(
+                  child: Image.asset(
+                    'assets/mascots/mascot_ask.png',
+                    width: 36,
+                    height: 36,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const SizedBox(width: 36),
+                  ),
                 ),
+                const SizedBox(width: 8),
+                // Guide button
+                _HeaderIconButton(
+                  icon: Icons.help_outline_rounded,
+                  tooltip: l10n.chatGuideTitle,
+                  onTap: _showGuideSheet,
+                ),
+                const SizedBox(width: 6),
+                // Clear conversation button (only shown when there are messages)
+                if (messages.isNotEmpty)
+                  _HeaderIconButton(
+                    icon: Icons.delete_outline_rounded,
+                    tooltip: l10n.chatClearTitle,
+                    onTap: _clearConversation,
+                  )
+                else
+                  _QuotaBadge(
+                    label: isPro
+                        ? l10n.chatQuotaPro
+                        : l10n.chatQuotaRemaining(quota.remaining),
+                    isPro: isPro,
+                    exhausted: exhausted,
+                  ),
               ],
             ),
           ),
 
           // ---- Messages area ----
           Expanded(
-            child: _messages.isEmpty
-                ? _EmptyState(
-                    onQuickTap: _send,
-                  )
+            child: messages.isEmpty
+                ? _EmptyState(onQuickTap: _send)
                 : ListView.builder(
                     controller: _scroll,
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                    itemCount: _messages.length + (_thinking ? 1 : 0),
+                    itemCount: messages.length + (thinking ? 1 : 0),
                     itemBuilder: (context, i) {
-                      if (_thinking && i == _messages.length) {
+                      if (thinking && i == messages.length) {
                         return const _ThinkingBubble();
                       }
-                      return _MessageBubble(message: _messages[i]);
+                      return _MessageBubble(message: messages[i]);
                     },
                   ),
           ),
@@ -174,10 +465,44 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           // ---- Input ----
           _ChatInput(
             controller: _controller,
-            enabled: !exhausted && !_thinking,
+            enabled: !exhausted && !thinking,
             onSend: _send,
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Header icon button (guide / clear)
+// ---------------------------------------------------------------------------
+
+class _HeaderIconButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  const _HeaderIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.white.withOpacity(0.06),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Icon(icon, size: 18, color: Colors.white70),
+          ),
+        ),
       ),
     );
   }
@@ -235,7 +560,7 @@ class _QuotaBadge extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Empty state — quick-prompt chips
+// Empty state — Remoty mascot + quick-prompt chips
 // ---------------------------------------------------------------------------
 
 class _EmptyState extends StatelessWidget {
@@ -250,6 +575,9 @@ class _EmptyState extends StatelessWidget {
       (Icons.weekend_outlined, l10n.chatQuickBinge),
       (Icons.favorite_border, l10n.chatQuickSad),
       (Icons.block, l10n.chatQuickSkip),
+      (Icons.bookmark_outline, l10n.chatQuickVault),
+      (Icons.star_outline, l10n.chatQuickRanking),
+      (Icons.movie_filter_outlined, l10n.chatQuickCreators),
     ];
 
     return ListView(
@@ -257,7 +585,7 @@ class _EmptyState extends StatelessWidget {
       children: [
         Center(
           child: Image.asset(
-            'assets/mascots/mascot_thinking.png',
+            'assets/mascots/mascot_ask.png',
             width: 140,
             height: 140,
             fit: BoxFit.contain,
@@ -277,7 +605,7 @@ class _EmptyState extends StatelessWidget {
                   width: 1.5,
                 ),
               ),
-              child: const Icon(Icons.auto_awesome,
+              child: const Icon(Icons.smart_toy,
                   color: Colors.white, size: 38),
             ),
           ),
@@ -363,14 +691,16 @@ class _QuickChip extends StatelessWidget {
 // Message bubble
 // ---------------------------------------------------------------------------
 
-class _MessageBubble extends StatelessWidget {
+class _MessageBubble extends ConsumerWidget {
   final ChatMessage message;
   const _MessageBubble({required this.message});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isUser = message.sender == ChatSender.user;
     const blue = Color(0xFF4F8CFF);
+    final catalog =
+        ref.watch(catalogProvider).valueOrNull ?? MockContent.catalog;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -378,6 +708,43 @@ class _MessageBubble extends StatelessWidget {
         crossAxisAlignment:
             isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
+          // Remoty avatar for bot messages
+          if (!isUser)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClipOval(
+                    child: Image.asset(
+                      'assets/mascots/mascot_ask.png',
+                      width: 22,
+                      height: 22,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        width: 22,
+                        height: 22,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.surfaceElevated,
+                        ),
+                        child: const Icon(Icons.smart_toy,
+                            size: 12, color: blue),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Remoty',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: blue,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: MediaQuery.of(context).size.width * 0.78,
@@ -421,7 +788,9 @@ class _MessageBubble extends StatelessWidget {
                 separatorBuilder: (_, __) => const SizedBox(width: 10),
                 itemBuilder: (_, i) {
                   final id = message.recommendedContentIds[i];
-                  final content = MockContent.byId(id);
+                  final content = catalog.cast<Content?>().firstWhere(
+                      (c) => c?.id == id,
+                      orElse: () => MockContent.byId(id));
                   if (content == null) return const SizedBox.shrink();
                   return _RecommendationCard(
                     id: id,
@@ -592,44 +961,85 @@ class _ThinkingBubbleState extends State<_ThinkingBubble>
       alignment: Alignment.centerLeft,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(16),
-              topRight: Radius.circular(16),
-              bottomLeft: Radius.circular(4),
-              bottomRight: Radius.circular(16),
-            ),
-            border: Border.all(color: Colors.white.withOpacity(0.08)),
-          ),
-          child: AnimatedBuilder(
-            animation: _ctrl,
-            builder: (_, __) {
-              return Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Remoty label above thinking bubble
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
-                children: List.generate(3, (i) {
-                  final phase = (_ctrl.value + i * 0.18) % 1.0;
-                  final scale = 0.6 + 0.6 * (1 - (phase - 0.5).abs() * 2);
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 3),
-                    child: Transform.scale(
-                      scale: scale,
-                      child: Container(
-                        width: 7,
-                        height: 7,
+                children: [
+                  ClipOval(
+                    child: Image.asset(
+                      'assets/mascots/mascot_search.png',
+                      width: 22,
+                      height: 22,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        width: 22,
+                        height: 22,
                         decoration: const BoxDecoration(
-                          color: Color(0xFF4F8CFF),
                           shape: BoxShape.circle,
+                          color: AppColors.surfaceElevated,
                         ),
+                        child: const Icon(Icons.smart_toy,
+                            size: 12, color: Color(0xFF4F8CFF)),
                       ),
                     ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Remoty',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF4F8CFF),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                  bottomLeft: Radius.circular(4),
+                  bottomRight: Radius.circular(16),
+                ),
+                border: Border.all(color: Colors.white.withOpacity(0.08)),
+              ),
+              child: AnimatedBuilder(
+                animation: _ctrl,
+                builder: (_, __) {
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: List.generate(3, (i) {
+                      final phase = (_ctrl.value + i * 0.18) % 1.0;
+                      final scale = 0.6 + 0.6 * (1 - (phase - 0.5).abs() * 2);
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        child: Transform.scale(
+                          scale: scale,
+                          child: Container(
+                            width: 7,
+                            height: 7,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF4F8CFF),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
                   );
-                }),
-              );
-            },
-          ),
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -661,7 +1071,7 @@ class _ExhaustedBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.auto_awesome, color: AppColors.accent),
+          const Icon(Icons.smart_toy, color: AppColors.accent),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
