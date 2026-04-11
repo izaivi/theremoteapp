@@ -41,6 +41,32 @@ post_install do |installer|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+
+      # Strip simulator platform from frameworks so App Store accepts the IPA
+      config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
+    end
+  end
+
+  # --- Strip simulator platform references from embedded frameworks ---
+  strip_script = <<~STRIP
+    echo "Stripping simulator platform from embedded frameworks..."
+    cd "${BUILT_PRODUCTS_DIR}/${FRAMEWORKS_FOLDER_PATH}"
+    for framework in *.framework; do
+      binary="${framework%.framework}/${framework%.framework}"
+      if [ -f "$framework/$binary" ]; then
+        # Check if binary contains simulator platform marker and remove it
+        if xcrun vtool -show "$framework/$binary" 2>/dev/null | grep -q "IOSSIMULATOR"; then
+          echo "Stripping simulator platform from $framework"
+          xcrun vtool -remove-build-version 7 -output "$framework/$binary.tmp" "$framework/$binary" 2>/dev/null && mv "$framework/$binary.tmp" "$framework/$binary"
+        fi
+      fi
+    done
+  STRIP
+
+  installer.pods_project.targets.each do |target|
+    if target.name == 'Pods-Runner'
+      phase = target.new_shell_script_build_phase('[CP] Strip Simulator Platforms')
+      phase.shell_script = strip_script
     end
   end
 end
