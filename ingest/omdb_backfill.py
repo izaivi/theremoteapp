@@ -49,14 +49,16 @@ log = logging.getLogger("omdb_backfill")
 
 def get_pending_rows(sb: Client, limit: int) -> list[dict]:
     """
-    Devuelve títulos que tienen imdb_id pero NO tienen imdb_score.
-    Esto asegura que nunca reprocesamos los mismos títulos.
+    Devuelve títulos que tienen imdb_id pero aún no han sido consultados a OMDb.
+    Usamos data_sources (NOT contains 'omdb') en vez de imdb_score IS NULL,
+    porque OMDb a veces devuelve sin scores o con Response=False; en esos casos
+    ya marcamos data_sources=['omdb'] para no reintentar y desperdiciar quota.
     """
     resp = (
         sb.table("content")
         .select("tmdb_id, imdb_id, data_sources")
-        .not_.is_("imdb_id", "null")       # tiene IMDB ID
-        .is_("imdb_score", "null")          # pero no tiene score aún
+        .not_.is_("imdb_id", "null")            # tiene IMDB ID
+        .not_.contains("data_sources", ["omdb"]) # no hemos consultado OMDb aún
         .limit(limit)
         .execute()
     )
@@ -64,10 +66,25 @@ def get_pending_rows(sb: Client, limit: int) -> list[dict]:
 
 
 def update_scores(sb: Client, updates: list[dict]) -> None:
-    """Upsert batch de scores a Supabase."""
+    """
+    Update existing content rows with new scores + data_sources.
+
+    We use UPDATE (not upsert) because every row in `updates` is guaranteed
+    to already exist — we literally just SELECTed them from the content
+    table. Upsert with on_conflict was failing with NOT NULL violations on
+    media_type because PostgreSQL evaluates NOT NULL during the INSERT
+    phase, before the ON CONFLICT DO UPDATE clause kicks in. Since we
+    don't include media_type/title/etc. in the payload (scores-only),
+    the INSERT attempt always fails even though we intend to update.
+    """
     if not updates:
         return
-    sb.table("content").upsert(updates, on_conflict="tmdb_id").execute()
+    for u in updates:
+        tmdb_id = u.get("tmdb_id")
+        if tmdb_id is None:
+            continue
+        payload = {k: v for k, v in u.items() if k != "tmdb_id"}
+        sb.table("content").update(payload).eq("tmdb_id", tmdb_id).execute()
 
 # ---------------------------------------------------------------------
 # OMDb
@@ -123,17 +140,37 @@ def parse_scores(data: dict) -> dict:
 # Main
 # ---------------------------------------------------------------------
 
+def count_pending(sb: Client) -> int:
+    """
+    Real count of pending rows, bypassing the Supabase REST 1,000-row cap.
+    Uses HEAD + count=exact — no data transfer, just the total.
+    """
+    resp = (
+        sb.table("content")
+        .select("tmdb_id", count="exact", head=True)
+        .not_.is_("imdb_id", "null")
+        .not_.contains("data_sources", ["omdb"])
+        .execute()
+    )
+    return resp.count or 0
+
+
 def run(limit: int, dry_run: bool = False) -> None:
     sb = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+    if dry_run:
+        total = count_pending(sb)
+        log.info("Títulos pendientes de OMDb (total real): %d", total)
+        log.info("A este ritmo (%d/día), tomaría ~%d días limpiar el backlog.",
+                 OMDB_DAILY_LIMIT,
+                 (total + OMDB_DAILY_LIMIT - 1) // OMDB_DAILY_LIMIT)
+        log.info("--dry-run activo, no se hacen llamadas a OMDb.")
+        return
 
     pending = get_pending_rows(sb, limit)
     total_pending = len(pending)
 
-    log.info("Títulos pendientes de OMDb: %d (limit solicitado: %d)", total_pending, limit)
-
-    if dry_run:
-        log.info("--dry-run activo, no se hacen llamadas a OMDb.")
-        return
+    log.info("Títulos a procesar ahora: %d (limit solicitado: %d)", total_pending, limit)
 
     if total_pending == 0:
         log.info("¡Todo el catálogo ya tiene scores de OMDb!")
