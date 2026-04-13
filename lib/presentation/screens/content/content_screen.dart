@@ -116,6 +116,62 @@ class ContentScreen extends ConsumerWidget {
                   ),
                 ),
               ),
+              // Director & Cast
+              if (content.director != null || content.cast.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (content.director != null) ...[
+                        const SizedBox(height: 12),
+                        RichText(
+                          text: TextSpan(
+                            style: const TextStyle(fontSize: 13, height: 1.4),
+                            children: [
+                              const TextSpan(
+                                text: 'Director  ',
+                                style: TextStyle(
+                                  color: AppColors.textMuted,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              TextSpan(
+                                text: content.director,
+                                style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (content.cast.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        RichText(
+                          text: TextSpan(
+                            style: const TextStyle(fontSize: 13, height: 1.4),
+                            children: [
+                              const TextSpan(
+                                text: 'Cast  ',
+                                style: TextStyle(
+                                  color: AppColors.textMuted,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              TextSpan(
+                                text: content.cast.take(5).join(', '),
+                                style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               const SizedBox(height: 24),
               _CreatorTakesSection(contentId: contentId),
               const SizedBox(height: 24),
@@ -766,7 +822,7 @@ class _QuickTakeCard extends ConsumerWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Write Quick Take button — rate limited (free: 1/day, premium: unlimited)
+// Write Quick Take button — rate limited (free: 3/day, premium: unlimited)
 // ---------------------------------------------------------------------------
 
 class _WriteQuickTakeButton extends ConsumerWidget {
@@ -778,9 +834,9 @@ class _WriteQuickTakeButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final todayCountAsync = ref.watch(quickTakesTodayCountProvider);
     final todayCount = todayCountAsync.valueOrNull ?? 0;
-    // TODO: check premium status. For now, free = 1/day.
+    // TODO: check premium status via RevenueCat.
     final isPremium = false;
-    final canPost = isPremium || todayCount < 1;
+    final canPost = isPremium || todayCount < 3;
 
     return InkWell(
       onTap: canPost
@@ -824,7 +880,7 @@ class _WriteQuickTakeButton extends ConsumerWidget {
             Text(
               canPost
                   ? 'Share your quick take'
-                  : 'Quick take limit reached (1/day)',
+                  : 'Quick take limit reached (3/day)',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,

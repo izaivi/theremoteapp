@@ -32,7 +32,7 @@ class ChatQuotaRepository {
   static const _keyUsed = 'chat.quota.used.v1';
   static const _keyDate = 'chat.quota.date.v1';
 
-  static const int freeDailyLimit = 10;
+  static const int freeDailyLimit = 5;
 
   DateTime _today() {
     final now = DateTime.now();

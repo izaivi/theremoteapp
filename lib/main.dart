@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/prefs/language_prefs.dart';
 import 'core/router/app_router.dart';
+import 'core/revenuecat/revenuecat_client.dart';
 import 'core/supabase/supabase_client.dart';
 import 'core/theme/app_theme.dart';
 import 'data/repositories/auth_repository.dart';
@@ -20,6 +21,11 @@ Future<void> main() async {
   // provided via --dart-define, this is a no-op and the app runs in
   // local-only mode (SharedPreferences fallback).
   await initSupabase();
+
+  // Initialize RevenueCat for in-app purchases. Same graceful fallback:
+  // no RC_APPLE_KEY/RC_GOOGLE_KEY → free-only mode (no paywall).
+  await initRevenueCat();
+
   runApp(const ProviderScope(child: TheRemoteApp()));
 }
 
@@ -47,6 +53,12 @@ class TheRemoteApp extends ConsumerWidget {
           // It would also nuke any alias the user set locally before a push
           // round-tripped to Supabase, leading to data loss on subsequent
           // sign-ins. refreshFromRemote handles the profile switch safely.
+
+          // Identify RevenueCat user so purchases are tied to the Supabase
+          // account, not the device. Must happen before any purchase calls.
+          final uid = state.session?.user.id;
+          if (uid != null) await identifyRevenueCatUser(uid);
+
           await ref.read(ratingsProvider.notifier).clearLocal();
           await ref.read(vaultProvider.notifier).clear();
           await ref.read(followsProvider.notifier).clearLocal();
@@ -61,6 +73,10 @@ class TheRemoteApp extends ConsumerWidget {
           ref.read(vaultProvider.notifier).refreshFromRemote();
           ref.read(followsProvider.notifier).refreshFromRemote();
         } else if (state.event == AuthChangeEvent.signedOut) {
+          // Reset RevenueCat to anonymous — detaches purchases from the
+          // previous account so the next sign-in starts clean.
+          await resetRevenueCatUser();
+
           await ref.read(userProfileProvider.notifier).reset();
           await ref.read(ratingsProvider.notifier).clearLocal();
           await ref.read(vaultProvider.notifier).clear();

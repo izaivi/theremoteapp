@@ -79,13 +79,29 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ShellRoute(
         builder: (context, state, child) => MainScaffold(child: child),
         routes: [
-          GoRoute(path: '/home', builder: (_, __) => const HomeScreen()),
           GoRoute(
-              path: '/discover', builder: (_, __) => const DiscoverScreen()),
-          GoRoute(path: '/chat', builder: (_, __) => const ChatScreen()),
+            path: '/home',
+            pageBuilder: (_, __) => const NoTransitionPage(child: HomeScreen()),
+          ),
           GoRoute(
-              path: '/creators', builder: (_, __) => const CreatorsScreen()),
-          GoRoute(path: '/vault', builder: (_, __) => const VaultScreen()),
+            path: '/discover',
+            pageBuilder: (_, __) =>
+                const NoTransitionPage(child: DiscoverScreen()),
+          ),
+          GoRoute(
+            path: '/chat',
+            pageBuilder: (_, __) => const NoTransitionPage(child: ChatScreen()),
+          ),
+          GoRoute(
+            path: '/creators',
+            pageBuilder: (_, __) =>
+                const NoTransitionPage(child: CreatorsScreen()),
+          ),
+          GoRoute(
+            path: '/vault',
+            pageBuilder: (_, __) =>
+                const NoTransitionPage(child: VaultScreen()),
+          ),
         ],
       ),
       // Settings lives outside the shell — pushed as a modal-ish route from

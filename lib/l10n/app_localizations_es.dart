@@ -55,28 +55,40 @@ class AppLocalizationsEs extends AppLocalizations {
   String get fiveGemsLockedCta => 'Ver con Premium';
 
   @override
-  String get paywallTitle => 'Flixscope Premium';
+  String get paywallTitle => 'Usuario PREMIUM';
 
   @override
-  String get paywallSubtitle => 'Decide mejor, y antes que el resto.';
+  String get paywallSubtitle => 'Experiencia pro: decide mejor y antes que los demás.';
 
   @override
-  String get paywallFeatureGems => 'Las 5 joyas completas + Decision Assistant';
+  String get paywallFeatureChat => 'Ask Remoty ilimitado (Companion inteligente)';
 
   @override
-  String get paywallFeatureChat => 'AI Chat ilimitado';
+  String get paywallFeatureDecision => 'Decision Assistant diario (lo más importante)';
 
   @override
-  String get paywallFeatureFilters => 'Filtros avanzados (drop-off, trust)';
+  String get paywallFeatureFilters => 'Filtros avanzados (drop-off, señales, trust score)';
 
   @override
-  String get paywallFeatureExploding => 'Early access a Explotando';
+  String get paywallFeatureExploding => 'Early access a trends (Exploding antes que otros)';
 
   @override
-  String get paywallFeatureQuickTake => 'Escribe Quick Takes (≤230 chars)';
+  String get paywallFeatureGems => '5 Gems diarios';
 
   @override
-  String get paywallFeatureNoAds => 'Sin anuncios';
+  String get paywallFeatureAlerts => 'Alertas personalizadas';
+
+  @override
+  String get paywallFeatureRegion => 'Exploración por región (ver qué funciona en otros países)';
+
+  @override
+  String get paywallFeatureStats => 'Estadísticas avanzadas';
+
+  @override
+  String get paywallFeatureWatchlist => 'Watchlist ilimitada';
+
+  @override
+  String get paywallFeatureQuickTake => 'Comentario corto QuickTake (250 chars)';
 
   @override
   String get paywallCta => 'Actualizar';
@@ -550,7 +562,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get chatQuotaPro => 'Ilimitado';
 
   @override
-  String get chatQuotaExhaustedTitle => 'Usaste tus 10 preguntas gratis de hoy';
+  String get chatQuotaExhaustedTitle => 'Usaste tus 5 preguntas gratis de hoy';
 
   @override
   String get chatQuotaExhaustedBody =>

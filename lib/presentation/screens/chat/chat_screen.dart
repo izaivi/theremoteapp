@@ -95,6 +95,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     final userRatings = ref.read(ratingsProvider);
 
+    // Extract previous query context for conversation continuity.
+    final msgs = ref.read(_chatMessagesProvider);
+    String? prevQuery;
+    List<String>? prevResultIds;
+    // Walk backwards to find the last user message + its AI reply.
+    for (int i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].sender == ChatSender.user) {
+        prevQuery = msgs[i].text;
+        // Find the AI reply that followed it.
+        if (i + 1 < msgs.length && msgs[i + 1].sender == ChatSender.ai) {
+          prevResultIds = msgs[i + 1].recommendedContentIds;
+        }
+        break;
+      }
+    }
+
     final engine = RemotypEngine(
       catalog: catalog,
       lovedIds: vault.loved,
@@ -102,6 +118,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       notForMeIds: vault.notForMe,
       creatorTakes: takes,
       ratings: userRatings,
+      previousQuery: prevQuery,
+      previousResultIds: prevResultIds,
     );
     final reply = engine.reply(text, spanish: isSpanish);
 
@@ -381,22 +399,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
+                // Title + tagline — flex but with a reasonable minWidth
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         l10n.chatTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: Theme.of(context)
                             .textTheme
-                            .headlineMedium
+                            .titleLarge
                             ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         l10n.chatTagline,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 13,
                           color: Theme.of(context).textTheme.bodySmall?.color,
@@ -405,6 +428,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(width: 8),
                 // Remoty avatar
                 ClipOval(
                   child: Image.asset(

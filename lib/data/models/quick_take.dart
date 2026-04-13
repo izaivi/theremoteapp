@@ -5,7 +5,7 @@
 /// thumbs up / thumbs down voting.
 ///
 /// Access rules:
-///   - Free users: 1 quick take per day.
+///   - Free users: 3 quick takes per day.
 ///   - Premium users: unlimited.
 ///   - All authenticated users can vote (thumbs up/down).
 

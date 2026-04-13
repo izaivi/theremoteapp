@@ -58,6 +58,9 @@ dependencies:
   google_sign_in: ^6.2.1
   crypto: ^3.0.3
 
+  # In-app purchases / subscriptions — RevenueCat
+  purchases_flutter: ^8.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:go_router/go_router.dart';
 
@@ -105,7 +106,7 @@ class ProfileScreen extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
         children: [
 
-          // ---------------- Account ----------------
+          // ═══════════════ Account ═══════════════
           _AccountCard(
             isSignedIn: isSignedIn,
             alias: profile.alias,
@@ -114,7 +115,7 @@ class ProfileScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 14),
 
-          // ---------------- Avatar picker ----------------
+          // ═══════════════ Avatar picker ═══════════════
           _AvatarPickerCard(
             currentKey: profile.avatarKey,
             seed: profile.alias ?? l10n.settingsTitle,
@@ -126,13 +127,13 @@ class ProfileScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 14),
 
-          // ---------------- Profile strength ----------------
+          // ═══════════════ Profile strength ═══════════════
           _ProfileStrengthCard(
             completed: profile.quizCompletion == QuizCompletion.long,
           ),
           const SizedBox(height: 24),
 
-          // ---------------- Profile ----------------
+          // ═══════════════ Profile ═══════════════
           _SectionHeader(l10n.profileSectionProfile),
           _Group(children: [
             _Row(
@@ -169,7 +170,7 @@ class ProfileScreen extends ConsumerWidget {
           ]),
           const SizedBox(height: 24),
 
-          // ---------------- Preferences ----------------
+          // ═══════════════ Preferences ═══════════════
           _SectionHeader(l10n.profileSectionPreferences),
           _Group(children: [
             _DropdownRow<String?>(
@@ -223,7 +224,7 @@ class ProfileScreen extends ConsumerWidget {
           ]),
           const SizedBox(height: 24),
 
-          // ---------------- Premium ----------------
+          // ═══════════════ Premium ═══════════════
           _SectionHeader(l10n.profileSectionPremium),
           _Group(children: [
             _Row(
@@ -261,34 +262,71 @@ class ProfileScreen extends ConsumerWidget {
           ]),
           const SizedBox(height: 24),
 
-          // ---------------- Support ----------------
-          _SectionHeader(l10n.profileSectionSupport),
-          _Group(children: [
-            _Row(
-              icon: Icons.help_outline,
-              title: l10n.profileHelpCenter,
-              onTap: comingSoon,
+          // ═══════════════ Contact Us ═══════════════
+          _SectionHeader('Contact us'),
+          _ContactCard(
+            icon: Icons.mail_outlined,
+            title: 'General Inquiries',
+            subtitle: 'contact@punkytigerlabs.com',
+            onTap: () => launchUrl(
+              Uri.parse('mailto:contact@punkytigerlabs.com'),
             ),
-            _Row(
-              icon: Icons.mail_outline,
-              title: l10n.profileContactUs,
-              onTap: comingSoon,
+          ),
+          const SizedBox(height: 8),
+          _ContactCard(
+            icon: Icons.business_center_outlined,
+            title: 'Business & Partnerships',
+            subtitle: 'partnerships@punkytigerlabs.com',
+            onTap: () => launchUrl(
+              Uri.parse('mailto:partnerships@punkytigerlabs.com'),
             ),
-            _Row(
-              icon: Icons.feedback_outlined,
-              title: l10n.profileSendFeedback,
-              onTap: comingSoon,
+          ),
+          const SizedBox(height: 8),
+          _ContactCard(
+            icon: Icons.lightbulb_outline,
+            title: 'Suggestions & Feedback',
+            subtitle: 'feedback@punkytigerlabs.com',
+            onTap: () => launchUrl(
+              Uri.parse('mailto:feedback@punkytigerlabs.com'),
             ),
-            _Row(
-              icon: Icons.star_border,
-              title: l10n.profileRateApp,
-              onTap: comingSoon,
-            ),
-          ]),
+          ),
+          const SizedBox(height: 8),
+          _ContactCard(
+            icon: Icons.star_border,
+            title: l10n.profileRateApp,
+            subtitle: 'Love Flixscope? Leave us a review!',
+            onTap: comingSoon,
+          ),
           const SizedBox(height: 24),
 
-          // ---------------- Legal ----------------
-          _SectionHeader(l10n.profileSectionLegal),
+          // ═══════════════ Visit Us ═══════════════
+          _SectionHeader('Visit us'),
+          Center(
+            child: OutlinedButton.icon(
+              onPressed: () => launchUrl(
+                Uri.parse('https://punkytigerlabs.com'),
+                mode: LaunchMode.externalApplication,
+              ),
+              icon: const Icon(Icons.public, size: 18),
+              label: const Text('punkytigerlabs.com'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white70,
+                side: BorderSide(color: Colors.white.withOpacity(0.15)),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // ═══════════════ Punky Tiger Labs branding ═══════════════
+          _PtlBrandingCard(),
+          const SizedBox(height: 24),
+
+          // ═══════════════ About ═══════════════
+          _SectionHeader(l10n.profileSectionAbout),
           _Group(children: [
             _Row(
               icon: Icons.description_outlined,
@@ -309,20 +347,26 @@ class ProfileScreen extends ConsumerWidget {
                 applicationVersion: _appVersion,
               ),
             ),
+            _Row(
+              icon: Icons.info_outline,
+              title: l10n.profileVersion,
+              trailingText: 'v$_appVersion — Build 2026.04.12',
+            ),
           ]),
           const SizedBox(height: 24),
 
-          // ---------------- Session ----------------
-          if (isSignedIn) ...[
-            _Group(children: [
+          // ═══════════════ Danger Zone ═══════════════
+          _SectionHeader('Danger zone', isDestructive: true),
+          _Group(children: [
+            if (isSignedIn)
               _Row(
                 icon: Icons.logout,
-                title: 'Sign out',
+                title: l10n.profileSignOut,
                 onTap: () async {
                   final ok = await showDialog<bool>(
                     context: context,
                     builder: (_) => AlertDialog(
-                      title: const Text('Sign out?'),
+                      title: Text(l10n.profileSignOut),
                       content: const Text(
                           'Your local data stays on this device. Sign in again to sync.'),
                       actions: [
@@ -332,42 +376,96 @@ class ProfileScreen extends ConsumerWidget {
                         ),
                         FilledButton(
                           onPressed: () => Navigator.pop(context, true),
-                          child: const Text('Sign out'),
+                          child: Text(l10n.profileSignOut),
                         ),
                       ],
                     ),
                   );
                   if (ok == true) {
                     await ref.read(authRepositoryProvider).signOut();
-                    // Clear the local profile so the UI shows "not signed in"
-                    // and the user can pick a different provider.
                     await ref.read(userProfileProvider.notifier).reset();
                     if (context.mounted) context.go('/home');
                   }
                 },
               ),
-            ]),
-            const SizedBox(height: 24),
-          ],
-
-          // ---------------- About ----------------
-          _SectionHeader(l10n.profileSectionAbout),
-          _Group(children: [
             _Row(
-              icon: Icons.info_outline,
-              title: l10n.profileVersion,
-              trailingText: '$_appVersion ($_appBuild)',
+              icon: Icons.delete_forever,
+              title: 'Delete Account',
+              destructive: true,
+              onTap: () async {
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('Delete Account?'),
+                    content: const Text(
+                        'This will permanently delete your account and all associated data. This action cannot be undone.'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.red.shade700,
+                        ),
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                );
+                if (ok == true && context.mounted) {
+                  comingSoon(); // TODO: wire real account deletion
+                }
+              },
             ),
           ]),
 
           const SizedBox(height: 32),
-          Center(
-            child: Text(
-              'Flixscope · $_appVersion',
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).textTheme.bodySmall?.color,
-              ),
+
+          // ═══════════════ Copyright footer ═══════════════
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Column(
+              children: [
+                Text(
+                  '\u00a9 2026 Punky Tiger Labs, Inc. All rights reserved.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Theme.of(context).textTheme.bodySmall?.color,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'All concepts, designs, gamification systems, translation engines, '
+                  'and intellectual property contained in this application are '
+                  'proprietary to Punky Tiger Labs, Inc.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.color
+                        ?.withOpacity(0.6),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Protected under United States Copyright Law, Title 17, U.S. Code.\n'
+                  'Unauthorized reproduction or distribution is strictly prohibited.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.color
+                        ?.withOpacity(0.5),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -383,7 +481,8 @@ class ProfileScreen extends ConsumerWidget {
 
 class _SectionHeader extends StatelessWidget {
   final String title;
-  const _SectionHeader(this.title);
+  final bool isDestructive;
+  const _SectionHeader(this.title, {this.isDestructive = false});
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
@@ -393,7 +492,9 @@ class _SectionHeader extends StatelessWidget {
             fontSize: 12,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.1,
-            color: Theme.of(context).colorScheme.primary,
+            color: isDestructive
+                ? Colors.red.shade400
+                : const Color(0xFFCFB053), // gold accent like F1 Fan
           ),
         ),
       );
@@ -425,6 +526,9 @@ class _Group extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFFCFB053).withOpacity(0.15),
+        ),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(children: separated),
@@ -444,6 +548,7 @@ class _Row extends StatelessWidget {
   final Widget? trailing;
   final VoidCallback? onTap;
   final bool highlight;
+  final bool destructive;
 
   const _Row({
     required this.icon,
@@ -453,21 +558,24 @@ class _Row extends StatelessWidget {
     this.trailing,
     this.onTap,
     this.highlight = false,
+    this.destructive = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
-    final textColor = highlight
-        ? primary
-        : Theme.of(context).textTheme.bodyLarge?.color;
+    final textColor = destructive
+        ? Colors.red.shade400
+        : highlight
+            ? primary
+            : Theme.of(context).textTheme.bodyLarge?.color;
     return InkWell(
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
         child: Row(
           children: [
-            Icon(icon, size: 20, color: highlight ? primary : Colors.white70),
+            Icon(icon, size: 20, color: destructive ? Colors.red.shade400 : highlight ? primary : Colors.white70),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -573,6 +681,145 @@ class _DropdownRow<T> extends StatelessWidget {
             onChanged: (v) {
               if (v != null || null is T) onChanged(v as T);
             },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Contact card — styled with outline border like F1 Fan reference
+// ---------------------------------------------------------------------------
+
+class _ContactCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _ContactCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          color: Theme.of(context).colorScheme.surface,
+          border: Border.all(
+            color: const Color(0xFFCFB053).withOpacity(0.25),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 22, color: Colors.white70),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).textTheme.bodySmall?.color,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward,
+                size: 18,
+                color: const Color(0xFFCFB053).withOpacity(0.6)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Punky Tiger Labs branding card
+// ---------------------------------------------------------------------------
+
+class _PtlBrandingCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: Theme.of(context).colorScheme.surface,
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
+      ),
+      child: Column(
+        children: [
+          // PTL logo
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.asset(
+              'assets/images/punkytigerlabs.png',
+              width: 80,
+              height: 80,
+              fit: BoxFit.contain,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'PUNKY TIGER LABS',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 2.0,
+              color: Color(0xFFCFB053),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            width: 40,
+            height: 2,
+            decoration: BoxDecoration(
+              color: const Color(0xFFCFB053),
+              borderRadius: BorderRadius.circular(1),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Applied Artificial Intelligence\nResearch & Development Laboratory',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: Theme.of(context).textTheme.bodySmall?.color,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Headquarters: Burbank, California, United States',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11,
+              color: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.color
+                  ?.withOpacity(0.7),
+            ),
           ),
         ],
       ),

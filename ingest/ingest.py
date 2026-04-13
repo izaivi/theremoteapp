@@ -4,9 +4,11 @@ The Remote — Fase 1 content ingest
 Pipeline:
   1. TMDB (backbone)        → catálogo + metadata + watch providers por país
   2. OMDb (enrichment)      → IMDb / Rotten Tomatoes / Metacritic scores
-  3. Watchmode (enrichment) → deep links + precios (US, MX, SE)
-  4. RapidAPI (fallback)    → availability para ES (streaming-availability)
-  5. Supabase upsert        → content + content_availability (service_role)
+  3. RapidAPI (fallback)    → availability para ES (streaming-availability)
+  4. Supabase upsert        → content + content_availability (service_role)
+
+Note: Watchmode was removed — the app constructs platform search URLs
+      at runtime (e.g. netflix.com/search?q=TITLE) instead of using deep links.
 
 Uso:
     python ingest.py                # full run (todas las plataformas/países)
@@ -27,7 +29,7 @@ from typing import Any
 import requests
 from dotenv import load_dotenv
 from supabase import Client, create_client
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
 
 # ---------------------------------------------------------------------
 # Config
@@ -37,7 +39,6 @@ load_dotenv()
 
 TMDB_TOKEN = os.environ["TMDB_TOKEN"]
 OMDB_API_KEY = os.environ["OMDB_API_KEY"]
-WATCHMODE_API_KEY = os.environ["WATCHMODE_API_KEY"]
 RAPIDAPI_KEY = os.environ["RAPIDAPI_KEY"]
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
@@ -46,25 +47,47 @@ COUNTRIES = [c.strip() for c in os.environ.get("INGEST_COUNTRIES", "US,MX,ES,SE"
 LANGS = [l.strip() for l in os.environ.get("INGEST_LANGS", "en,es,sv").split(",")]
 PAGES_PER_PROVIDER = int(os.environ.get("INGEST_PAGES_PER_PROVIDER", "3"))
 
-# Países que Watchmode puede enriquecer (free tier = 3 países).
-WATCHMODE_COUNTRIES = {"US", "MX", "SE"}
 # Países que caen a RapidAPI como fallback.
 RAPIDAPI_COUNTRIES = {"ES"}
 
-# Plataformas soportadas en Fase 1 (id en DB ↔ tmdb_provider_id ↔ watchmode source id).
+# Plataformas soportadas en Fase 1 (id en DB ↔ tmdb_provider_id).
 PLATFORMS = [
-    # (db_id, slug, tmdb_provider_id, watchmode_source_id)
-    (1, "netflix",      8,    203),
-    (2, "max",          1899, 387),
-    (3, "disney",       337,  372),
-    (4, "prime",        119,  26),
-    (5, "appletv",      350,  371),
-    (6, "mubi",         11,   47),
-    (7, "crunchyroll",  283,  283),
+    # (db_id, slug, tmdb_provider_id)
+    (1, "netflix",      8),
+    (2, "max",          1899),
+    (3, "disney",       337),
+    (4, "prime",        119),
+    (5, "appletv",      350),
+    (6, "mubi",         11),
+    (7, "crunchyroll",  283),
 ]
 
 # Mapeo país → idioma principal para /details (sinopsis).
 LANG_BY_COUNTRY = {"US": "en-US", "MX": "es-MX", "ES": "es-ES", "SE": "sv-SE"}
+
+# TMDB genre IDs — used by --genre-sweep to discover titles without platform filter.
+TMDB_GENRES_MOVIE = {
+    28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy",
+    80: "Crime", 99: "Documentary", 18: "Drama", 10751: "Family",
+    14: "Fantasy", 36: "History", 27: "Horror", 10402: "Music",
+    9648: "Mystery", 10749: "Romance", 878: "Sci-Fi",
+    53: "Thriller", 10752: "War", 37: "Western",
+}
+TMDB_GENRES_TV = {
+    10759: "Action & Adventure", 16: "Animation", 35: "Comedy",
+    80: "Crime", 99: "Documentary", 18: "Drama", 10751: "Family",
+    10762: "Kids", 9648: "Mystery", 10763: "News", 10764: "Reality",
+    10765: "Sci-Fi & Fantasy", 10766: "Soap", 10767: "Talk",
+    10768: "War & Politics", 37: "Western",
+}
+
+# Year-decade buckets for genre sweep — maximises unique discoveries.
+GENRE_SWEEP_DECADES = [
+    (2020, 2026),
+    (2010, 2019),
+    (2000, 2009),
+    (1980, 1999),
+]
 
 logging.basicConfig(
     level=logging.INFO,
@@ -110,6 +133,8 @@ class ContentRow:
     synopsis_es: str | None = None
     synopsis_sv: str | None = None
     imdb_id: str | None = None
+    director: str | None = None
+    cast_list: list[str] = field(default_factory=list)
     imdb_score: float | None = None
     rt_score: int | None = None
     metacritic_score: int | None = None
@@ -130,7 +155,6 @@ class AvailabilityRow:
     monetization_type: str
     price_amount: float | None = None
     price_currency: str | None = None
-    deep_link: str | None = None
     source: str = "tmdb"
 
     def to_dict(self) -> dict[str, Any]:
@@ -155,10 +179,62 @@ def tmdb_discover(provider_id: int, country: str, page: int, media_type: str = "
     return data.get("results", [])
 
 
+def tmdb_discover_genre(genre_id: int, page: int, media_type: str = "movie",
+                        year_gte: int | None = None, year_lte: int | None = None) -> list[dict]:
+    """Discover by genre WITHOUT platform filter — for broad catalog sweeps."""
+    url = f"{TMDB_BASE}/discover/{media_type}"
+    params: dict = {
+        "language": "en-US",
+        "sort_by": "popularity.desc",
+        "with_genres": genre_id,
+        "vote_count.gte": 50,        # skip ultra-obscure titles
+        "page": page,
+    }
+    date_field = "primary_release_date" if media_type == "movie" else "first_air_date"
+    if year_gte:
+        params[f"{date_field}.gte"] = f"{year_gte}-01-01"
+    if year_lte:
+        params[f"{date_field}.lte"] = f"{year_lte}-12-31"
+    data = http_get(url, headers=TMDB_HEADERS, params=params)
+    return data.get("results", [])
+
+
 def tmdb_details(tmdb_id: int, media_type: str, lang: str) -> dict:
     url = f"{TMDB_BASE}/{media_type}/{tmdb_id}"
     params = {"language": lang, "append_to_response": "external_ids"}
     return http_get(url, headers=TMDB_HEADERS, params=params)
+
+
+def tmdb_credits(tmdb_id: int, media_type: str) -> tuple[str | None, list[str]]:
+    """Fetch director + top-billed cast from TMDB credits endpoint."""
+    url = f"{TMDB_BASE}/{media_type}/{tmdb_id}/credits"
+    try:
+        data = http_get(url, headers=TMDB_HEADERS)
+    except requests.HTTPError as e:
+        log.warning("TMDB credits failed for %s/%s: %s", media_type, tmdb_id, e)
+        return None, []
+
+    # Director: first person with job == "Director" in crew
+    director = None
+    for person in data.get("crew", []):
+        if person.get("job") == "Director":
+            director = person.get("name")
+            break
+    # For TV: use "created by" from details if no director found
+    if not director and media_type == "tv":
+        for person in data.get("crew", []):
+            if person.get("job") in ("Executive Producer", "Creator"):
+                director = person.get("name")
+                break
+
+    # Cast: top 6 billed actors
+    cast = [
+        person["name"]
+        for person in (data.get("cast", []) or [])[:6]
+        if person.get("name")
+    ]
+
+    return director, cast
 
 
 def tmdb_watch_providers(tmdb_id: int, media_type: str) -> dict:
@@ -216,6 +292,11 @@ def build_content_from_tmdb(tmdb_id: int, media_type: str) -> ContentRow | None:
     except requests.HTTPError:
         pass
 
+    # Director & cast from credits endpoint.
+    director, cast = tmdb_credits(tmdb_id, media_type)
+    row.director = director
+    row.cast_list = cast
+
     return row
 
 
@@ -245,7 +326,6 @@ def tmdb_availability_rows(tmdb_id: int, media_type: str) -> list[AvailabilityRo
                     country_code=country,
                     platform_id=db_id,
                     monetization_type=monetization,
-                    deep_link=block.get("link"),
                     source="tmdb",
                 ))
     return rows
@@ -294,67 +374,6 @@ def omdb_enrich(row: ContentRow) -> None:
     if "omdb" not in row.data_sources:
         row.data_sources.append("omdb")
 
-
-# ---------------------------------------------------------------------
-# Watchmode — deep links para US/MX/SE
-# ---------------------------------------------------------------------
-
-def watchmode_enrich(tmdb_id: int, media_type: str) -> list[AvailabilityRow]:
-    tmdb_ref = f"{'movie' if media_type == 'movie' else 'tv'}-{tmdb_id}"
-    try:
-        search = http_get(
-            "https://api.watchmode.com/v1/search/",
-            params={
-                "apiKey": WATCHMODE_API_KEY,
-                "search_field": "tmdb_movie_id" if media_type == "movie" else "tmdb_tv_id",
-                "search_value": tmdb_id,
-            },
-        )
-    except requests.HTTPError as e:
-        log.warning("Watchmode search failed for %s: %s", tmdb_ref, e)
-        return []
-
-    hits = search.get("title_results") or []
-    if not hits:
-        return []
-    wm_id = hits[0].get("id")
-    if not wm_id:
-        return []
-
-    try:
-        sources = http_get(
-            f"https://api.watchmode.com/v1/title/{wm_id}/sources/",
-            params={"apiKey": WATCHMODE_API_KEY},
-        )
-    except requests.HTTPError as e:
-        log.warning("Watchmode sources failed for %s: %s", wm_id, e)
-        return []
-
-    wm_source_to_db_id = {p[3]: p[0] for p in PLATFORMS}
-    rows: list[AvailabilityRow] = []
-    for src in sources or []:
-        country = src.get("region")
-        if country not in WATCHMODE_COUNTRIES or country not in COUNTRIES:
-            continue
-        db_id = wm_source_to_db_id.get(src.get("source_id"))
-        if db_id is None:
-            continue
-        monetization = (src.get("type") or "flatrate").lower()
-        if monetization == "sub":
-            monetization = "flatrate"
-        if monetization not in ("flatrate", "free", "ads", "rent", "buy"):
-            continue
-        rows.append(AvailabilityRow(
-            content_id=tmdb_id,
-            country_code=country,
-            platform_id=db_id,
-            monetization_type=monetization,
-            price_amount=src.get("price"),
-            price_currency=src.get("format") if src.get("price") else None,
-            deep_link=src.get("web_url"),
-            source="watchmode",
-        ))
-    return rows
 
 
 # ---------------------------------------------------------------------
@@ -413,7 +432,6 @@ def rapidapi_enrich_es(imdb_id: str | None, tmdb_id: int) -> list[AvailabilityRo
             monetization_type=monetization,
             price_amount=price.get("amount"),
             price_currency=price.get("currency"),
-            deep_link=o.get("link"),
             source="rapidapi",
         ))
     return rows
@@ -456,7 +474,7 @@ def upsert_availability(sb: Client, rows: list[AvailabilityRow]) -> None:
 # Main
 # ---------------------------------------------------------------------
 
-def run(limit: int | None, platforms_filter: set[str] | None, skip_watchmode: bool = False, skip_rapidapi: bool = False, skip_omdb: bool = False, tmdb_ids: list[tuple[int, str]] | None = None) -> None:
+def run(limit: int | None, platforms_filter: set[str] | None, skip_rapidapi: bool = False, skip_omdb: bool = False, tmdb_ids: list[tuple[int, str]] | None = None, genre_sweep: bool = False, genre_sweep_pages: int = 5) -> None:
     sb = supabase_client()
 
     discovered: set[tuple[int, str]] = set()  # (tmdb_id, media_type)
@@ -466,7 +484,8 @@ def run(limit: int | None, platforms_filter: set[str] | None, skip_watchmode: bo
         discovered = set(tmdb_ids)
         log.info("Manual inject: %d titles", len(discovered))
     else:
-        for db_id, slug, tmdb_pid, _wm_id in PLATFORMS:
+        # ── Phase 1: platform × country discover (existing) ──────────
+        for db_id, slug, tmdb_pid in PLATFORMS:
             if platforms_filter and slug not in platforms_filter:
                 continue
             for country in COUNTRIES:
@@ -489,6 +508,47 @@ def run(limit: int | None, platforms_filter: set[str] | None, skip_watchmode: bo
                 if limit and len(discovered) >= limit:
                     break
 
+        log.info("Phase 1 (platform×country): %d unique titles", len(discovered))
+
+        # ── Phase 2: genre × decade sweep (broad catalog) ────────────
+        if genre_sweep:
+            before = len(discovered)
+            for genre_map, media_type in [(TMDB_GENRES_MOVIE, "movie"), (TMDB_GENRES_TV, "tv")]:
+                for genre_id, genre_name in genre_map.items():
+                    for year_gte, year_lte in GENRE_SWEEP_DECADES:
+                        for page in range(1, genre_sweep_pages + 1):
+                            try:
+                                results = tmdb_discover_genre(
+                                    genre_id, page, media_type,
+                                    year_gte=year_gte, year_lte=year_lte,
+                                )
+                            except (requests.HTTPError, RetryError, Exception) as e:
+                                log.warning("Genre sweep %s/%s %d-%d p%d: %s",
+                                            genre_name, media_type, year_gte, year_lte, page, e)
+                                time.sleep(1)  # back off a bit after error
+                                break  # skip remaining pages for this combo
+
+                            if not results:
+                                break  # no more pages
+
+                            for r in results:
+                                discovered.add((r["id"], media_type))
+
+                            if limit and len(discovered) >= limit:
+                                break
+                            time.sleep(0.2)  # cortesía
+                        if limit and len(discovered) >= limit:
+                            break
+                    if limit and len(discovered) >= limit:
+                        break
+                    log.info("Genre sweep: %s/%s done → %d total",
+                             genre_name, media_type, len(discovered))
+                if limit and len(discovered) >= limit:
+                    break
+
+            log.info("Phase 2 (genre sweep): +%d new → %d total",
+                     len(discovered) - before, len(discovered))
+
         if limit:
             discovered = set(list(discovered)[:limit])
 
@@ -497,8 +557,16 @@ def run(limit: int | None, platforms_filter: set[str] | None, skip_watchmode: bo
     content_rows: list[ContentRow] = []
     avail_rows: list[AvailabilityRow] = []
 
-    for tmdb_id, media_type in discovered:
-        row = build_content_from_tmdb(tmdb_id, media_type)
+    total = len(discovered)
+    errors = 0
+    for idx, (tmdb_id, media_type) in enumerate(discovered, 1):
+        try:
+            row = build_content_from_tmdb(tmdb_id, media_type)
+        except (RetryError, Exception) as e:
+            log.warning("TMDB details failed for %s/%d: %s", media_type, tmdb_id, e)
+            errors += 1
+            time.sleep(0.5)
+            continue
         if row is None:
             continue
 
@@ -509,13 +577,10 @@ def run(limit: int | None, platforms_filter: set[str] | None, skip_watchmode: bo
                 log.warning("OMDb failed for %d: %s", tmdb_id, e)
         content_rows.append(row)
 
-        avail_rows.extend(tmdb_availability_rows(tmdb_id, media_type))
-
-        if not skip_watchmode and any(c in WATCHMODE_COUNTRIES for c in COUNTRIES):
-            try:
-                avail_rows.extend(watchmode_enrich(tmdb_id, media_type))
-            except Exception as e:
-                log.warning("Watchmode failed for %d: %s", tmdb_id, e)
+        try:
+            avail_rows.extend(tmdb_availability_rows(tmdb_id, media_type))
+        except (RetryError, Exception) as e:
+            log.warning("TMDB providers failed for %d: %s", tmdb_id, e)
 
         if not skip_rapidapi and "ES" in COUNTRIES:
             try:
@@ -523,7 +588,16 @@ def run(limit: int | None, platforms_filter: set[str] | None, skip_watchmode: bo
             except Exception as e:
                 log.warning("RapidAPI failed for %d: %s", tmdb_id, e)
 
+        if idx % 200 == 0:
+            log.info("Enrichment progress: %d/%d (errors: %d)", idx, total, errors)
+
         time.sleep(0.15)
+
+    # Deduplicate by tmdb_id (same title can appear as movie + tv).
+    seen_ids: dict[int, ContentRow] = {}
+    for r in content_rows:
+        seen_ids[r.tmdb_id] = r  # last write wins
+    content_rows = list(seen_ids.values())
 
     # Upsert content primero (FK desde availability).
     # Batch en chunks para no blowout payload.
@@ -556,9 +630,13 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--limit", type=int, default=None, help="Máximo de títulos a procesar (testing)")
     p.add_argument("--platforms", type=str, default=None, help="Comma-separated slugs (netflix,max,...)")
-    p.add_argument("--skip-watchmode", action="store_true", help="Skip Watchmode enrichment (para runs frecuentes sin quemar free tier)")
     p.add_argument("--skip-rapidapi", action="store_true", help="Skip RapidAPI enrichment for ES availability")
     p.add_argument("--skip-omdb", action="store_true", help="Skip OMDb enrichment (IMDb/RT/Metacritic scores)")
+    p.add_argument("--genre-sweep", action="store_true",
+                   help="Discover titles by genre×decade (no platform filter). "
+                        "Reaches 5k+ unique titles. Combine with --skip-omdb etc.")
+    p.add_argument("--genre-sweep-pages", type=int, default=5,
+                   help="Pages per genre×decade×media_type combo (default 5 → ~100 titles each)")
     p.add_argument("--tmdb-ids", type=str, default=None,
                    help="Inject specific TMDB IDs (skip discover). "
                         "Format: 'movie:78,tv:1399,movie:348' or just '78,348' (defaults to movie)")
@@ -574,8 +652,10 @@ def main() -> None:
 
     try:
         run(limit=args.limit, platforms_filter=platforms_filter,
-            skip_watchmode=args.skip_watchmode, skip_rapidapi=args.skip_rapidapi,
-            skip_omdb=args.skip_omdb, tmdb_ids=tmdb_ids)
+            skip_rapidapi=args.skip_rapidapi,
+            skip_omdb=args.skip_omdb, tmdb_ids=tmdb_ids,
+            genre_sweep=args.genre_sweep,
+            genre_sweep_pages=args.genre_sweep_pages)
     except KeyboardInterrupt:
         log.warning("Interrupted")
         sys.exit(130)

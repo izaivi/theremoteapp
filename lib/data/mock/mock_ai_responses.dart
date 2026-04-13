@@ -22,6 +22,11 @@ class RemotypEngine {
   final List<CreatorTake> creatorTakes;
   final Map<String, int> ratings; // contentId → 1-5 stars
 
+  /// Previous query context — allows Remoty to refine results.
+  /// Caller passes the last user message so Remoty can combine intents.
+  final String? previousQuery;
+  final List<String>? previousResultIds;
+
   const RemotypEngine({
     required this.catalog,
     this.lovedIds = const {},
@@ -29,7 +34,57 @@ class RemotypEngine {
     this.notForMeIds = const {},
     this.creatorTakes = const [],
     this.ratings = const {},
+    this.previousQuery,
+    this.previousResultIds,
   });
+
+  // ── Random fallback messages (witty, no-judgment Remoty vibe) ──
+
+  static const _fallbacksEn = [
+    "Hmm, I don't have that one in my catalog yet — but honestly, my catalog "
+        "is still growing. Try asking me by mood or genre!",
+    "I looked everywhere (okay, I looked in my database) and came up empty. "
+        "Want to try a genre instead? I'm great at moods.",
+    "No luck on that one. But hey, I'm the friend who won't judge you for "
+        "watching The Smurfs at 2 AM — try me with a vibe.",
+    "That one's off my radar for now. But ask me for something fun, scary, "
+        "or cry-worthy and I'll deliver.",
+  ];
+
+  static const _fallbacksEs = [
+    "Hmm, eso no lo tengo en mi catálogo todavía — pero sigo creciendo. "
+        "¿Pruebas con un mood o género?",
+    "Busqué por todos lados (bueno, en mi base de datos) y nada. "
+        "¿Quieres probar con un género? Soy bueno con los moods.",
+    "No encontré eso. Pero hey, soy el amigo que no te juzga si quieres ver "
+        "Los Pitufos a las 2 AM — dime un vibe.",
+    "Eso está fuera de mi radar por ahora. Pero pídeme algo divertido, "
+        "de miedo, o para llorar y te cumplo.",
+  ];
+
+  static const _greetingsEn = [
+    "Hey! I'm Remoty, your streaming buddy. Tell me a mood, a genre, "
+        "or just what you feel like watching — I got you.",
+    "What's up! Remoty here. I know your catalog inside out. "
+        "Hit me with a vibe — action? comedy? crying on the couch?",
+    "Hey there! I'm Remoty — think of me as that friend who always "
+        "has the perfect recommendation. What are you in the mood for?",
+    "Yo! Remoty at your service. No judgment, all picks. "
+        "What do you wanna watch?",
+  ];
+
+  static const _greetingsEs = [
+    "¡Hola! Soy Remoty, tu compa de streaming. Dime un mood, un género, "
+        "o lo que se te antoje ver — yo te busco.",
+    "¡Qué onda! Aquí Remoty. Me sé tu catálogo de memoria. "
+        "Aviéntame un vibe — ¿acción? ¿comedia? ¿llorar en el sillón?",
+    "¡Hey! Soy Remoty — piensa en mí como ese amigo que siempre "
+        "tiene la recomendación perfecta. ¿Qué se te antoja?",
+    "¡Yo! Remoty a tus órdenes. Cero juicio, puros picks. "
+        "¿Qué quieres ver?",
+  ];
+
+  String _randomFrom(List<String> list) => list[_rng.nextInt(list.length)];
 
   /// Entry point. Returns response text + optional content IDs for cards.
   ({String text, List<String> contentIds}) reply(
@@ -52,11 +107,7 @@ class RemotypEngine {
     switch (intent) {
       case _Intent.greeting:
         return (
-          text: spanish
-              ? '¡Hola! Soy Remoty, tu compañero de streaming. '
-                  'Pregúntame por mood, género, plataforma, o lo que quieras ver.'
-              : 'Hey! I\'m Remoty, your streaming companion. '
-                  'Ask me by mood, genre, platform, or what you\'re looking for.',
+          text: spanish ? _randomFrom(_greetingsEs) : _randomFrom(_greetingsEn),
           contentIds: const [],
         );
 
@@ -183,6 +234,39 @@ class RemotypEngine {
           spanish: spanish,
         );
 
+      case _Intent.drama:
+        final pool = catalog
+            .where((c) => c.genres
+                .any((g) => g.toLowerCase().contains('drama')))
+            .where((c) => c.watcherScore >= 75)
+            .toList();
+        return _respond(
+          pool: pool,
+          intro: spanish
+              ? 'Drama de peso, de los que te dejan pensando:'
+              : 'Heavy-hitting drama that stays with you:',
+          spanish: spanish,
+        );
+
+      case _Intent.romance:
+        final pool = catalog
+            .where((c) => c.genres.any((g) {
+                  final gl = g.toLowerCase();
+                  return gl.contains('romance') || gl.contains('love');
+                }))
+            .where((c) => c.watcherScore >= 70)
+            .toList();
+        return _respond(
+          pool: pool,
+          intro: spanish
+              ? 'Para una noche romántica:'
+              : 'For a romantic night in:',
+          spanish: spanish,
+        );
+
+      case _Intent.refine:
+        return _handleRefine(q, spanish: spanish);
+
       case _Intent.horror:
         final pool = catalog
             .where((c) => c.genres
@@ -222,15 +306,7 @@ class RemotypEngine {
         return _handlePlatform(q, spanish: spanish);
 
       case _Intent.generic:
-        final pool = [...catalog]
-          ..sort((a, b) => b.watcherScore.compareTo(a.watcherScore));
-        return _respond(
-          pool: pool,
-          intro: spanish
-              ? 'Esto es lo que el Watcher Score ama ahora:'
-              : 'Here\'s what the Watcher Score is loving right now:',
-          spanish: spanish,
-        );
+        return _handleSearch(q, spanish: spanish);
     }
   }
 
@@ -557,9 +633,213 @@ class RemotypEngine {
     );
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // SEARCH HANDLER — title, director, cast fuzzy match
+  // ══════════════════════════════════════════════════════════════
+
+  ({String text, List<String> contentIds}) _handleSearch(
+    String q, {
+    required bool spanish,
+  }) {
+    // Normalize query: lowercase, remove common filler words
+    final query = q
+        .replaceAll(RegExp(r'\b(busca|buscar|find|search|show|dame|quiero ver|want to watch|recommend|recomienda)\b'), '')
+        .trim();
+
+    if (query.isEmpty) {
+      final pool = [...catalog]
+        ..sort((a, b) => b.watcherScore.compareTo(a.watcherScore));
+      return _respond(
+        pool: pool,
+        intro: spanish
+            ? 'Esto es lo que el Watcher Score ama ahora:'
+            : 'Here\'s what the Watcher Score is loving right now:',
+        spanish: spanish,
+      );
+    }
+
+    final ql = query.toLowerCase();
+
+    // 1. Exact/substring title match (highest priority)
+    final titleMatches = catalog
+        .where((c) => c.title.toLowerCase().contains(ql))
+        .toList()
+      ..sort((a, b) {
+        // Prefer exact matches, then shorter titles (more specific)
+        final aExact = a.title.toLowerCase() == ql ? 0 : 1;
+        final bExact = b.title.toLowerCase() == ql ? 0 : 1;
+        if (aExact != bExact) return aExact.compareTo(bExact);
+        return a.title.length.compareTo(b.title.length);
+      });
+
+    if (titleMatches.isNotEmpty) {
+      return _respond(
+        pool: titleMatches,
+        intro: spanish
+            ? 'Encontré esto en el catálogo:'
+            : 'Found this in the catalog:',
+        spanish: spanish,
+        shuffle: false,
+      );
+    }
+
+    // 2. Director match
+    final directorMatches = catalog
+        .where((c) => c.director?.toLowerCase().contains(ql) ?? false)
+        .toList()
+      ..sort((a, b) => b.watcherScore.compareTo(a.watcherScore));
+
+    if (directorMatches.isNotEmpty) {
+      final dirName = directorMatches.first.director ?? query;
+      return _respond(
+        pool: directorMatches,
+        intro: spanish
+            ? 'Películas de **$dirName** en el catálogo:'
+            : 'Films by **$dirName** in the catalog:',
+        spanish: spanish,
+        shuffle: false,
+      );
+    }
+
+    // 3. Cast match
+    final castMatches = catalog
+        .where((c) => c.cast.any((a) => a.toLowerCase().contains(ql)))
+        .toList()
+      ..sort((a, b) => b.watcherScore.compareTo(a.watcherScore));
+
+    if (castMatches.isNotEmpty) {
+      // Find the actual actor name for display
+      final actorName = castMatches.first.cast
+          .firstWhere((a) => a.toLowerCase().contains(ql), orElse: () => query);
+      return _respond(
+        pool: castMatches,
+        intro: spanish
+            ? 'Títulos con **$actorName**:'
+            : 'Titles with **$actorName**:',
+        spanish: spanish,
+        shuffle: false,
+      );
+    }
+
+    // 4. Word-level fuzzy: match if ANY significant word (3+ chars) in the
+    //    query appears in the title. Catches partial title searches.
+    final words = ql.split(RegExp(r'\s+')).where((w) => w.length >= 3).toList();
+    if (words.isNotEmpty) {
+      final fuzzyMatches = catalog.where((c) {
+        final tl = c.title.toLowerCase();
+        return words.any((w) => tl.contains(w));
+      }).toList()
+        ..sort((a, b) => b.watcherScore.compareTo(a.watcherScore));
+
+      if (fuzzyMatches.isNotEmpty) {
+        return _respond(
+          pool: fuzzyMatches,
+          intro: spanish
+              ? 'No encontré una coincidencia exacta, pero esto podría interesarte:'
+              : 'No exact match, but this might interest you:',
+          spanish: spanish,
+        );
+      }
+    }
+
+    // 5. Nothing found — witty random fallback + trending picks
+    final pool = [...catalog]
+      ..sort((a, b) => b.watcherScore.compareTo(a.watcherScore));
+    final fallback = spanish ? _randomFrom(_fallbacksEs) : _randomFrom(_fallbacksEn);
+    return _respond(
+      pool: pool,
+      intro: fallback,
+      spanish: spanish,
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // REFINE HANDLER — narrows previous results based on new criteria
+  // ══════════════════════════════════════════════════════════════
+
+  ({String text, List<String> contentIds}) _handleRefine(
+    String q, {
+    required bool spanish,
+  }) {
+    // Get previous results to narrow down
+    final prevPool = previousResultIds != null && previousResultIds!.isNotEmpty
+        ? catalog.where((c) => previousResultIds!.contains(c.id)).toList()
+        : <Content>[];
+
+    // If we have no previous results, search the whole catalog
+    final searchPool = prevPool.isNotEmpty ? prevPool : catalog;
+
+    // Detect what they want to refine BY
+    List<Content> refined;
+
+    if (_any(q, ['fight', 'pelea', 'violent', 'violenc', 'martial', 'combat'])) {
+      refined = searchPool
+          .where((c) => c.genres.any((g) {
+                final gl = g.toLowerCase();
+                return gl.contains('action') || gl.contains('crime') || gl.contains('thriller');
+              }))
+          .toList();
+    } else if (_any(q, ['funny', 'fun', 'comedy', 'comedia', 'divertid'])) {
+      refined = searchPool
+          .where((c) => c.genres.any((g) => g.toLowerCase().contains('comedy')))
+          .toList();
+    } else if (_any(q, ['drama', 'serious', 'heavy', 'intense'])) {
+      refined = searchPool
+          .where((c) => c.genres.any((g) => g.toLowerCase().contains('drama')))
+          .toList();
+    } else if (_any(q, ['romance', 'romántic', 'love', 'amor'])) {
+      refined = searchPool
+          .where((c) => c.genres.any((g) {
+                final gl = g.toLowerCase();
+                return gl.contains('romance') || gl.contains('love');
+              }))
+          .toList();
+    } else {
+      // Generic word match within previous results
+      final words = q.split(RegExp(r'\s+')).where((w) => w.length >= 3).toList();
+      refined = searchPool.where((c) {
+        final tl = '${c.title} ${c.genres.join(' ')} ${c.director ?? ''}'.toLowerCase();
+        return words.any((w) => tl.contains(w));
+      }).toList();
+    }
+
+    if (refined.isEmpty) {
+      return (
+        text: spanish
+            ? 'No encontré nada con ese filtro dentro de lo anterior. '
+                '¿Quieres que busque en todo el catálogo?'
+            : 'Nothing matched that filter in your previous results. '
+                'Want me to search the full catalog?',
+        contentIds: const [],
+      );
+    }
+
+    return _respond(
+      pool: refined,
+      intro: spanish
+          ? 'Refinando tu búsqueda:'
+          : 'Narrowing it down:',
+      spanish: spanish,
+    );
+  }
+
   // ── Intent classification ──
 
-  static _Intent _detectIntent(String q) {
+  _Intent _detectIntent(String q) {
+    // Check for refinement of previous query first —
+    // short messages like "but with fights" or "pero de peleas" refine.
+    if (previousQuery != null &&
+        previousResultIds != null &&
+        previousResultIds!.isNotEmpty &&
+        _any(q, [
+          'but', 'pero', 'more', 'más', 'mas', 'less', 'menos',
+          'only', 'solo', 'sólo', 'instead', 'better', 'mejor',
+          'with', 'con', 'without', 'sin', 'que sean', 'that are',
+          'de esas', 'of those', 'like that', 'así', 'asi',
+        ])) {
+      return _Intent.refine;
+    }
+
     if (_any(q, ['hi', 'hello', 'hola', 'hey', 'sup', 'qué onda', 'que onda'])) {
       return _Intent.greeting;
     }
@@ -590,8 +870,25 @@ class RemotypEngine {
       'emocional', 'heartbreak',
     ])) return _Intent.sad;
 
-    if (_any(q, ['comedy', 'comedia', 'funny', 'chistos', 'gracios', 'reír', 'reir'])) {
+    if (_any(q, [
+      'comedy', 'comedia', 'funny', 'fun', 'chistos', 'gracios',
+      'reír', 'reir', 'laugh', 'divertid', 'hilarious', 'humor',
+    ])) {
       return _Intent.comedy;
+    }
+
+    if (_any(q, [
+      'drama', 'dramát', 'dramat', 'serious', 'intense', 'intens',
+      'deep', 'profund', 'heavy',
+    ])) {
+      return _Intent.drama;
+    }
+
+    if (_any(q, [
+      'romance', 'romantic', 'romántic', 'romanc', 'love story',
+      'amor', 'date night', 'couple', 'pareja',
+    ])) {
+      return _Intent.romance;
     }
 
     if (_any(q, ['horror', 'terror', 'scary', 'miedo', 'susto'])) {
@@ -602,7 +899,11 @@ class RemotypEngine {
       return _Intent.animation;
     }
 
-    if (_any(q, ['action', 'acción', 'accion', 'fight', 'crime'])) {
+    if (_any(q, [
+      'action', 'acción', 'accion', 'fight', 'pelea', 'crime',
+      'thriller', 'shoot', 'war', 'guerra', 'violent', 'violenc',
+      'martial', 'combat', 'explosio',
+    ])) {
       return _Intent.action;
     }
 
@@ -677,9 +978,7 @@ class RemotypEngine {
     if (pool.isEmpty) {
       return (
         text: emptyMsg ??
-            (spanish
-                ? 'Nada en el catálogo coincide — prueba con un mood, género o plataforma.'
-                : 'Nothing in the catalog matches — try a mood, genre, or platform.'),
+            (spanish ? _randomFrom(_fallbacksEs) : _randomFrom(_fallbacksEn)),
         contentIds: const [],
       );
     }
@@ -717,11 +1016,14 @@ enum _Intent {
   sciFi,
   classic,
   comedy,
+  drama,
+  romance,
   horror,
   animation,
   vault,
   ranking,
   creators,
   platform,
+  refine,
   generic,
 }

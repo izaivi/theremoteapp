@@ -58,9 +58,16 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
 
   List<Content> _applyFilters(List<Content> source) {
     return source.where((c) {
-      if (_query.isNotEmpty &&
-          !c.title.toLowerCase().contains(_query.toLowerCase())) {
-        return false;
+      if (_query.isNotEmpty) {
+        final q = _query.toLowerCase();
+        final matchesTitle = c.title.toLowerCase().contains(q);
+        final matchesDirector =
+            c.director?.toLowerCase().contains(q) ?? false;
+        final matchesCast =
+            c.cast.any((a) => a.toLowerCase().contains(q));
+        if (!matchesTitle && !matchesDirector && !matchesCast) {
+          return false;
+        }
       }
       if (_genres.isNotEmpty &&
           !c.genres.any((g) => _genres.contains(g))) {

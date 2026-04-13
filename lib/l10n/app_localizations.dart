@@ -185,50 +185,74 @@ abstract class AppLocalizations {
   /// No description provided for @paywallTitle.
   ///
   /// In en, this message translates to:
-  /// **'Flixscope Premium'**
+  /// **'PREMIUM User'**
   String get paywallTitle;
 
   /// No description provided for @paywallSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Decide better, and before everyone else.'**
+  /// **'Pro experience: decide better and before everyone else.'**
   String get paywallSubtitle;
-
-  /// No description provided for @paywallFeatureGems.
-  ///
-  /// In en, this message translates to:
-  /// **'All 5 Gems daily + Decision Assistant'**
-  String get paywallFeatureGems;
 
   /// No description provided for @paywallFeatureChat.
   ///
   /// In en, this message translates to:
-  /// **'Unlimited AI Chat'**
+  /// **'Ask Remoty unlimited (clever Companion)'**
   String get paywallFeatureChat;
+
+  /// No description provided for @paywallFeatureDecision.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Decision Assistant (the big one)'**
+  String get paywallFeatureDecision;
 
   /// No description provided for @paywallFeatureFilters.
   ///
   /// In en, this message translates to:
-  /// **'Advanced filters (drop-off, trust)'**
+  /// **'Advanced filters (drop-off, signals, trust score)'**
   String get paywallFeatureFilters;
 
   /// No description provided for @paywallFeatureExploding.
   ///
   /// In en, this message translates to:
-  /// **'Early access to Exploding'**
+  /// **'Early access to trends (Exploding before others)'**
   String get paywallFeatureExploding;
+
+  /// No description provided for @paywallFeatureGems.
+  ///
+  /// In en, this message translates to:
+  /// **'5 Gems daily'**
+  String get paywallFeatureGems;
+
+  /// No description provided for @paywallFeatureAlerts.
+  ///
+  /// In en, this message translates to:
+  /// **'Personalized alerts'**
+  String get paywallFeatureAlerts;
+
+  /// No description provided for @paywallFeatureRegion.
+  ///
+  /// In en, this message translates to:
+  /// **'Explore by region (see what works elsewhere)'**
+  String get paywallFeatureRegion;
+
+  /// No description provided for @paywallFeatureStats.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced statistics'**
+  String get paywallFeatureStats;
+
+  /// No description provided for @paywallFeatureWatchlist.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited Watchlist'**
+  String get paywallFeatureWatchlist;
 
   /// No description provided for @paywallFeatureQuickTake.
   ///
   /// In en, this message translates to:
-  /// **'Write Quick Takes (≤230 chars)'**
+  /// **'Short comment QuickTake (250 chars)'**
   String get paywallFeatureQuickTake;
-
-  /// No description provided for @paywallFeatureNoAds.
-  ///
-  /// In en, this message translates to:
-  /// **'No ads'**
-  String get paywallFeatureNoAds;
 
   /// No description provided for @paywallCta.
   ///

@@ -56,28 +56,40 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fiveGemsLockedCta => 'Unlock with Premium';
 
   @override
-  String get paywallTitle => 'Flixscope Premium';
+  String get paywallTitle => 'PREMIUM User';
 
   @override
-  String get paywallSubtitle => 'Decide better, and before everyone else.';
+  String get paywallSubtitle => 'Pro experience: decide better and before everyone else.';
 
   @override
-  String get paywallFeatureGems => 'All 5 Gems daily + Decision Assistant';
+  String get paywallFeatureChat => 'Ask Remoty unlimited (clever Companion)';
 
   @override
-  String get paywallFeatureChat => 'Unlimited AI Chat';
+  String get paywallFeatureDecision => 'Daily Decision Assistant (the big one)';
 
   @override
-  String get paywallFeatureFilters => 'Advanced filters (drop-off, trust)';
+  String get paywallFeatureFilters => 'Advanced filters (drop-off, signals, trust score)';
 
   @override
-  String get paywallFeatureExploding => 'Early access to Exploding';
+  String get paywallFeatureExploding => 'Early access to trends (Exploding before others)';
 
   @override
-  String get paywallFeatureQuickTake => 'Write Quick Takes (≤230 chars)';
+  String get paywallFeatureGems => '5 Gems daily';
 
   @override
-  String get paywallFeatureNoAds => 'No ads';
+  String get paywallFeatureAlerts => 'Personalized alerts';
+
+  @override
+  String get paywallFeatureRegion => 'Explore by region (see what works elsewhere)';
+
+  @override
+  String get paywallFeatureStats => 'Advanced statistics';
+
+  @override
+  String get paywallFeatureWatchlist => 'Unlimited Watchlist';
+
+  @override
+  String get paywallFeatureQuickTake => 'Short comment QuickTake (250 chars)';
 
   @override
   String get paywallCta => 'Upgrade';
@@ -552,7 +564,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatQuotaExhaustedTitle =>
-      'You’ve used your 10 free questions today';
+      ‘You’ve used your 5 free questions today’;
 
   @override
   String get chatQuotaExhaustedBody =>
