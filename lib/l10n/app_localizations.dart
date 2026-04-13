@@ -200,12 +200,6 @@ abstract class AppLocalizations {
   /// **'Ask Remoty unlimited (clever Companion)'**
   String get paywallFeatureChat;
 
-  /// No description provided for @paywallFeatureDecision.
-  ///
-  /// In en, this message translates to:
-  /// **'Daily Decision Assistant (the big one)'**
-  String get paywallFeatureDecision;
-
   /// No description provided for @paywallFeatureFilters.
   ///
   /// In en, this message translates to:
@@ -223,18 +217,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'5 Gems daily'**
   String get paywallFeatureGems;
-
-  /// No description provided for @paywallFeatureAlerts.
-  ///
-  /// In en, this message translates to:
-  /// **'Personalized alerts'**
-  String get paywallFeatureAlerts;
-
-  /// No description provided for @paywallFeatureRegion.
-  ///
-  /// In en, this message translates to:
-  /// **'Explore by region (see what works elsewhere)'**
-  String get paywallFeatureRegion;
 
   /// No description provided for @paywallFeatureStats.
   ///
@@ -1127,7 +1109,7 @@ abstract class AppLocalizations {
   /// No description provided for @chatQuotaExhaustedTitle.
   ///
   /// In en, this message translates to:
-  /// **'You’ve used your 10 free questions today'**
+  /// **'You’ve used your 5 free questions today'**
   String get chatQuotaExhaustedTitle;
 
   /// No description provided for @chatQuotaExhaustedBody.

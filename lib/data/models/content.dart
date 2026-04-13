@@ -33,7 +33,6 @@ class WatcherScoreBreakdown {
 class Content {
   final String id;
   final int? tmdbId;
-  final int? watchmodeId;
   final String title;
   final ContentType type;
   final int year;
@@ -64,17 +63,16 @@ class Content {
   // Tags AI-generated
   final List<String> tags;
 
+  // Crew
+  final String? director;
+  final List<String> cast;
+
   // Available platforms in user's region (denormalized for UI speed)
   final List<String> availablePlatforms;
-
-  /// Platform name → deep link URL (from Watchmode / TMDB).
-  /// Used to open streaming apps directly from the content detail screen.
-  final Map<String, String> platformDeepLinks;
 
   const Content({
     required this.id,
     this.tmdbId,
-    this.watchmodeId,
     required this.title,
     required this.type,
     required this.year,
@@ -96,8 +94,9 @@ class Content {
     this.traktScore,
     required this.socialMentions,
     required this.tags,
+    this.director,
+    this.cast = const [],
     required this.availablePlatforms,
-    this.platformDeepLinks = const {},
   });
 }
 

@@ -17,6 +17,7 @@ import '../../../data/repositories/ratings_repository.dart';
 import '../../../data/repositories/user_profile_repository.dart';
 import '../../../data/repositories/vault_repository.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../widgets/paywall_sheet.dart';
 import '../../widgets/watcher_score_badge.dart';
 
 /// Content detail — where both functions of the product meet:
@@ -834,8 +835,7 @@ class _WriteQuickTakeButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final todayCountAsync = ref.watch(quickTakesTodayCountProvider);
     final todayCount = todayCountAsync.valueOrNull ?? 0;
-    // TODO: check premium status via RevenueCat.
-    final isPremium = false;
+    final isPremium = ref.watch(isProProvider);
     final canPost = isPremium || todayCount < 3;
 
     return InkWell(
@@ -1587,8 +1587,8 @@ class _PlatformChips extends StatelessWidget {
   const _PlatformChips({required this.content});
 
   /// Build a search URL for each streaming platform.
-  /// This opens the platform's app (if installed) or website with a search
-  /// for the title — no third-party API needed.
+  /// Opens the platform's app (if installed) or website with a title search.
+  /// All URLs are constructed at runtime — no external deep-link API.
   static String? _searchUrl(String platform, String title) {
     final q = Uri.encodeComponent(title);
     return switch (platform.toLowerCase()) {
@@ -1779,10 +1779,13 @@ class _MyRatingBar extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: 6),
-            // 🔖 Watchlist — "ver después"
+            // 🔖 Watchlist — "ver después" (free: 15 max)
             InkWell(
-              onTap: () =>
-                  ref.read(vaultProvider.notifier).toggleWatchlist(contentId),
+              onTap: () async {
+                final ok = await ref.read(vaultProvider.notifier)
+                    .toggleWatchlist(contentId, isPro: ref.read(isProProvider));
+                if (!ok && context.mounted) showPaywall(context);
+              },
               borderRadius: BorderRadius.circular(10),
               child: Container(
                 padding: const EdgeInsets.symmetric(

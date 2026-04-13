@@ -59,28 +59,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get paywallTitle => 'PREMIUM User';
 
   @override
-  String get paywallSubtitle => 'Pro experience: decide better and before everyone else.';
+  String get paywallSubtitle =>
+      'Pro experience: decide better and before everyone else.';
 
   @override
   String get paywallFeatureChat => 'Ask Remoty unlimited (clever Companion)';
 
   @override
-  String get paywallFeatureDecision => 'Daily Decision Assistant (the big one)';
+  String get paywallFeatureFilters =>
+      'Advanced filters (drop-off, signals, trust score)';
 
   @override
-  String get paywallFeatureFilters => 'Advanced filters (drop-off, signals, trust score)';
-
-  @override
-  String get paywallFeatureExploding => 'Early access to trends (Exploding before others)';
+  String get paywallFeatureExploding =>
+      'Early access to trends (Exploding before others)';
 
   @override
   String get paywallFeatureGems => '5 Gems daily';
-
-  @override
-  String get paywallFeatureAlerts => 'Personalized alerts';
-
-  @override
-  String get paywallFeatureRegion => 'Explore by region (see what works elsewhere)';
 
   @override
   String get paywallFeatureStats => 'Advanced statistics';
@@ -564,7 +558,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatQuotaExhaustedTitle =>
-      ‘You’ve used your 5 free questions today’;
+      'You’ve used your 5 free questions today';
 
   @override
   String get chatQuotaExhaustedBody =>

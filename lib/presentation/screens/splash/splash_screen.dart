@@ -7,8 +7,11 @@ import '../../../l10n/app_localizations.dart';
 ///
 /// Full-bleed hero image (hand holding the glowing remote) with a dark
 /// gradient overlay at the bottom for the tagline + CTA. Tapping the
-/// button routes to `/home` — the router redirect then decides whether
-/// to show onboarding or the real Home depending on quiz completion.
+/// button routes to `/auth` — once the user signs in (or continues as
+/// guest) the router redirect sends them to `/onboarding` (Fast Quiz)
+/// if they haven't completed it, or directly to `/home` if they have.
+///
+/// Order: Splash → Auth → Quiz → Home.
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
 
@@ -81,7 +84,7 @@ class SplashScreen extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () => context.go('/home'),
+                      onPressed: () => context.go('/auth'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF4F8CFF),
                         foregroundColor: Colors.white,

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models/user_profile.dart';
+import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/user_profile_repository.dart';
 import '../../presentation/screens/auth/auth_screen.dart';
 import '../../presentation/screens/chat/chat_screen.dart';
@@ -19,17 +20,29 @@ import '../../presentation/screens/splash/splash_screen.dart';
 import '../../presentation/screens/vault/vault_screen.dart';
 import '../../presentation/widgets/main_scaffold.dart';
 
-/// Router as a Riverpod provider so redirects can react to profile changes.
+/// Router as a Riverpod provider so redirects can react to profile and
+/// auth state changes.
+///
+/// Flow: **Splash → Auth → Quiz (Onboarding) → Home**
 ///
 /// Redirect rules:
-///   - If the user has NOT completed the Fast Quiz → force `/onboarding`.
-///   - If they have and are sitting on `/onboarding` → push them to `/home`.
+///   - `/splash` and `/auth` are always allowed (no gating).
+///   - If the user is NOT signed in → force `/auth`.
+///   - If signed in but quiz NOT done → force `/onboarding`.
+///   - If quiz done and sitting on `/onboarding` → push to `/home`.
 final appRouterProvider = Provider<GoRouter>((ref) {
-  // Mirror profile state into a plain Listenable that GoRouter can subscribe
-  // to for refresh notifications.
+  // Mirror profile + auth state into a plain Listenable that GoRouter can
+  // subscribe to for refresh notifications. We re-evaluate redirects whenever
+  // either changes — e.g. user signs in (auth state) or finishes the quiz
+  // (profile state).
   final refresh = ValueNotifier<int>(0);
   ref.listen<UserProfile>(
     userProfileProvider,
+    (_, __) => refresh.value++,
+    fireImmediately: false,
+  );
+  ref.listen(
+    authStateChangesProvider,
     (_, __) => refresh.value++,
     fireImmediately: false,
   );
@@ -40,10 +53,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     errorBuilder: (context, state) => _RouterErrorScreen(error: state.error),
     redirect: (context, state) {
       final profile = ref.read(userProfileProvider);
+      final user = ref.read(currentUserProvider);
       final loc = state.matchedLocation;
       final fullLoc = state.uri.toString();
       final atOnboarding = loc == '/onboarding';
       final atSplash = loc == '/splash';
+      final atAuth = loc == '/auth';
+      final signedIn = user != null;
       final done = profile.quizCompletion != QuizCompletion.none;
 
       // Auth deep-link catch-all. When Supabase finishes an OAuth or Magic
@@ -55,16 +71,29 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // to match it — and since `login-callback` is not a declared route,
       // the errorBuilder kicks in ("Something went off the rails"). Swallow
       // it here: if we see any URL that smells like the auth callback, send
-      // the user to /home — by then the session is already live.
+      // the user to /home — by then the session is already live, and the
+      // redirect rules below will bounce them to /onboarding if the quiz
+      // still needs doing.
       if (loc.contains('login-callback') ||
           fullLoc.contains('login-callback')) {
         return '/home';
       }
 
-      // Splash is always allowed — it's the welcome gate.
+      // Welcome gate and auth screen are always reachable — they're the
+      // entry surfaces before any session exists.
       if (atSplash) return null;
+      if (atAuth) return null;
+
+      // Not signed in → must authenticate first. Splash and Auth are the
+      // only pre-auth surfaces; everything else bounces here.
+      if (!signedIn) return '/auth';
+
+      // Signed in but quiz not done → quiz is mandatory before catalog.
       if (!done && !atOnboarding) return '/onboarding';
+
+      // Quiz already done and somehow back on /onboarding → home.
       if (done && atOnboarding) return '/home';
+
       return null;
     },
     routes: [

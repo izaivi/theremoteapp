@@ -5,6 +5,43 @@ Formato: sección por fecha, bullets cortos.
 
 ---
 
+## 2026-04-13 — Build 8: Onboarding gating + Quick Takes counters + RevenueCat bundle fix
+
+### Quick Takes — contador thumbs up/down arreglado
+- **Bug**: el emoji se coloreaba al votar pero el contador permanecía en 0 en `quick_takes.thumbs_up` / `thumbs_down`. Causa raíz: la migration `2026-04-13_vote_and_follow_triggers.sql` corrió en una sola transacción que rolleó atrás por type mismatch en la sección de `user_follows` (creator_id text vs uuid), así que el trigger del primer bloque tampoco quedó aplicado.
+- **Fix**: aislada la sección "QUICK TAKE VOTE COUNTERS" y aplicada por separado vía SQL Editor. Función `update_quick_take_vote_counts()` con `SECURITY DEFINER` (necesario porque RLS de `quick_takes` no permite UPDATEs cross-user — el trigger ahora los hace en nombre del owner del registro). Trigger `AFTER INSERT OR UPDATE OR DELETE ON quick_take_votes FOR EACH ROW`. Backfill manual de los contadores existentes con `COUNT(*)` agrupado.
+- **Resultado**: votos previos recalculados correctamente ("prueba"=1👍, "flop en la última season"=2👍, "Me gusto. Está divertida."=2👍). Nuevos votos actualizan el contador en tiempo real.
+- **Pendiente**: convertir `user_follows.creator_id` de `text` a `uuid` y reaplicar la sección 2 del migration original (followers count). No bloquea Build 8.
+
+### RevenueCat — Credentials issue resuelto (Bundle ID mismatch)
+- **Síntoma**: dashboard de RevenueCat marcaba "Credentials need attention" para la app Flixscope. La misma App-Specific Shared Secret funcionaba sin problemas para Kireya (otra app en la misma cuenta de Apple Developer 95925D7AY7).
+- **Causa raíz** (descubierta vía Chrome MCP inspeccionando el form de la app config): RevenueCat tenía registrado `com.punkytiger.flixscope` como Bundle ID — un identificador que **nunca existió** en App Store Connect. El bundle real registrado es `com.punkytigerlabs.theremote`.
+- **Fix**: actualizado el campo "App Bundle ID" en RevenueCat a `com.punkytigerlabs.theremote`, save changes, refresh credentials → "Valid credentials" ✅.
+- **Producto IDs sin cambios**: `com.punkytiger.flixscope.pro.monthly` y `.pro.annual` siguen siendo correctos (matchean App Store Connect).
+- **Persistencia del error en simulador**: aún después del fix en dashboard, el simulador iOS sigue tirando "credential issue" — comportamiento esperado por (a) cache del SDK de RevenueCat en el cliente, (b) StoreKit en simulador es flaky sin StoreKit Configuration File. Validación real va en TestFlight con device físico + sandbox tester.
+
+### Onboarding — Reorden de flujo: Splash → Auth → Quiz → Home
+- **Cambio de UX**: antes el quiz iba antes del auth, ahora el auth es lo primero. Razón: las preferencias del quiz se guardan a un user_id real en Supabase, así que pedir auth primero elimina edge cases de "guest hace quiz, después se loggea, qué pasa con sus preferencias".
+- **`splash_screen.dart`**: CTA `context.go('/home')` → `context.go('/auth')`. Docstring del flujo actualizada.
+- **`onboarding_screen.dart`**: al terminar el quiz va directo a `/home` (la sesión ya existe). Comentario explicando el nuevo orden.
+- **`app_router.dart`**: gating de auth añadido en el redirect:
+  - Importa `auth_repository.dart` para `currentUserProvider` y `authStateChangesProvider`.
+  - `ref.listen(authStateChangesProvider, (_, __) => refresh.value++)` — el router reacciona a cambios de auth state (sign-in / sign-out) y reevalúa el redirect.
+  - Reglas: si no hay sesión y no estás en `/splash` o `/auth` → redirige a `/auth`. Si hay sesión pero quiz no completado → `/onboarding`. Si quiz completado y estás en `/onboarding` → `/home`.
+- **`auth_screen.dart`**: botón de cerrar (X) en AppBar ahora es condicional a `ref.watch(currentUserProvider) != null`. Sin sesión = sin escape, no puedes saltarte el auth obligatorio. Con sesión = botón visible (caso "Settings → Sign in to upgrade"). `automaticallyImplyLeading: false` para evitar back button automático.
+
+### Verificación en simulador
+- **Account existente**: signin → salta directo a Home (quiz ya completado en sesión previa). ✅
+- **Guest**: signin anonymous → quiz aparece (3 pasos) → Home. ✅
+- **Premium IAP**: error de credentials persiste en simulador (esperado, ver RevenueCat arriba). Validación pendiente en TestFlight.
+
+### Pendientes Build 8
+- Subir IPA Build 8 a TestFlight.
+- Probar Premium IAP en device real con sandbox tester.
+- Migration de `user_follows.creator_id` text → uuid + reaplicar trigger de followers count.
+
+---
+
 ## 2026-04-11 — Build 5: Take System Redesign + Platform Links + Quick Takes + Remoty
 
 ### Remoty Companion — IA tab → Ask Remoty

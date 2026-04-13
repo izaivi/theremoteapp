@@ -58,28 +58,23 @@ class AppLocalizationsEs extends AppLocalizations {
   String get paywallTitle => 'Usuario PREMIUM';
 
   @override
-  String get paywallSubtitle => 'Experiencia pro: decide mejor y antes que los demás.';
+  String get paywallSubtitle =>
+      'Experiencia pro: decide mejor y antes que los demás.';
 
   @override
-  String get paywallFeatureChat => 'Ask Remoty ilimitado (Companion inteligente)';
+  String get paywallFeatureChat =>
+      'Ask Remoty ilimitado (Companion inteligente)';
 
   @override
-  String get paywallFeatureDecision => 'Decision Assistant diario (lo más importante)';
+  String get paywallFeatureFilters =>
+      'Filtros avanzados (drop-off, señales, trust score)';
 
   @override
-  String get paywallFeatureFilters => 'Filtros avanzados (drop-off, señales, trust score)';
-
-  @override
-  String get paywallFeatureExploding => 'Early access a trends (Exploding antes que otros)';
+  String get paywallFeatureExploding =>
+      'Early access a trends (Exploding antes que otros)';
 
   @override
   String get paywallFeatureGems => '5 Gems diarios';
-
-  @override
-  String get paywallFeatureAlerts => 'Alertas personalizadas';
-
-  @override
-  String get paywallFeatureRegion => 'Exploración por región (ver qué funciona en otros países)';
 
   @override
   String get paywallFeatureStats => 'Estadísticas avanzadas';
@@ -88,7 +83,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get paywallFeatureWatchlist => 'Watchlist ilimitada';
 
   @override
-  String get paywallFeatureQuickTake => 'Comentario corto QuickTake (250 chars)';
+  String get paywallFeatureQuickTake =>
+      'Comentario corto QuickTake (250 chars)';
 
   @override
   String get paywallCta => 'Actualizar';

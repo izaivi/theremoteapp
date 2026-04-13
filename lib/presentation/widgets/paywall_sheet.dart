@@ -85,17 +85,16 @@ class _PaywallContentState extends State<_PaywallContent> {
           ),
         );
       }
+    } on PurchasesErrorCode catch (_) {
+      // User cancelled or billing issue — stay on the paywall, no error.
     } catch (e) {
-      // PurchaseCancelled is normal — user dismissed the native sheet.
-      if (e is! PurchasesCancelledError) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Purchase failed: $e'),
-              backgroundColor: Colors.red.shade700,
-            ),
-          );
-        }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Purchase failed: $e'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _purchasing = false);
@@ -107,19 +106,16 @@ class _PaywallContentState extends State<_PaywallContent> {
     final l10n = AppLocalizations.of(context)!;
     final features = [
       (Icons.smart_toy_outlined, l10n.paywallFeatureChat),
-      (Icons.psychology_outlined, l10n.paywallFeatureDecision),
       (Icons.tune, l10n.paywallFeatureFilters),
       (Icons.rocket_launch_outlined, l10n.paywallFeatureExploding),
       (Icons.diamond_outlined, l10n.paywallFeatureGems),
-      (Icons.notifications_active_outlined, l10n.paywallFeatureAlerts),
-      (Icons.public, l10n.paywallFeatureRegion),
       (Icons.bar_chart_outlined, l10n.paywallFeatureStats),
       (Icons.bookmark_outline, l10n.paywallFeatureWatchlist),
       (Icons.edit_outlined, l10n.paywallFeatureQuickTake),
     ];
 
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -223,8 +219,12 @@ class _PaywallContentState extends State<_PaywallContent> {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  _error!,
+                  _error!.length > 120
+                      ? '${_error!.substring(0, 120)}…'
+                      : _error!,
                   textAlign: TextAlign.center,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: Colors.red.shade300,
                     fontSize: 12,

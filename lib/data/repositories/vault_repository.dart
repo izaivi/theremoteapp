@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'supabase_sync.dart';
+import 'user_profile_repository.dart';
 
 /// Vault — "Mi Bóveda". The user's personal library of content signals.
 ///
@@ -85,6 +86,10 @@ class VaultRepository {
 final vaultRepositoryProvider =
     Provider<VaultRepository>((ref) => VaultRepository());
 
+/// Free users can save up to this many items in their watchlist.
+/// Premium users have unlimited watchlist.
+const int kFreeWatchlistLimit = 15;
+
 class VaultController extends StateNotifier<VaultState> {
   VaultController(this._repo, this._sync) : super(VaultState.empty) {
     _load();
@@ -92,6 +97,10 @@ class VaultController extends StateNotifier<VaultState> {
 
   final VaultRepository _repo;
   final SupabaseSyncService _sync;
+
+  /// Whether the free watchlist limit has been reached.
+  bool isWatchlistFull(bool isPro) =>
+      !isPro && state.watchlist.length >= kFreeWatchlistLimit;
 
   Future<void> _load() async {
     state = await _repo.load();
@@ -130,12 +139,18 @@ class VaultController extends StateNotifier<VaultState> {
   }
 
   /// Toggle watchlist. Removes from loved + notForMe if present.
-  Future<void> toggleWatchlist(String id) async {
+  /// Returns `false` if the free watchlist limit was hit (caller should
+  /// show the paywall). Removing always succeeds.
+  Future<bool> toggleWatchlist(String id, {bool isPro = false}) async {
     if (state.isWatchlisted(id)) {
       await _persist(
           state.copyWith(watchlist: {...state.watchlist}..remove(id)));
       _sync.deleteVaultEntry(id);
-      return;
+      return true;
+    }
+    // Enforce free-tier limit.
+    if (!isPro && state.watchlist.length >= kFreeWatchlistLimit) {
+      return false; // caller shows paywall
     }
     await _persist(state.copyWith(
       watchlist: {...state.watchlist, id},
@@ -143,6 +158,7 @@ class VaultController extends StateNotifier<VaultState> {
       notForMe: {...state.notForMe}..remove(id),
     ));
     _sync.pushVaultBucket(id, 'watchlist');
+    return true;
   }
 
   /// Toggle notForMe. Removes from loved + watchlist if present.

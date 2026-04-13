@@ -84,7 +84,7 @@ class RemotypEngine {
         "¿Qué quieres ver?",
   ];
 
-  String _randomFrom(List<String> list) => list[_rng.nextInt(list.length)];
+  static String _randomFrom(List<String> list) => list[_rng.nextInt(list.length)];
 
   /// Entry point. Returns response text + optional content IDs for cards.
   ({String text, List<String> contentIds}) reply(
@@ -604,7 +604,7 @@ class RemotypEngine {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // PLATFORM HANDLER — searches real catalog platformDeepLinks
+  // PLATFORM HANDLER — searches real catalog availablePlatforms
   // ══════════════════════════════════════════════════════════════
 
   ({String text, List<String> contentIds}) _handlePlatform(
@@ -613,7 +613,7 @@ class RemotypEngine {
   }) {
     final platform = _extractPlatform(q);
     final pool = catalog
-        .where((c) => c.platformDeepLinks.keys
+        .where((c) => c.availablePlatforms
             .any((p) => p.toLowerCase().contains(platform.toLowerCase())))
         .where((c) => c.watcherScore >= 70)
         .toList()

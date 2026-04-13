@@ -131,10 +131,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           activePlatforms: _platforms.toList(),
           favoriteGenres: _genres.toList(),
         );
-    // Send to auth screen so the user signs in (or continues as guest)
-    // before seeing the catalog. This avoids the "empty Home" problem
-    // where the catalog provider fires before any session exists.
-    if (mounted) context.go('/auth');
+    // Auth already happened before the quiz (Splash → Auth → Quiz → Home),
+    // so the session is live by the time we land here. Go straight home.
+    if (mounted) context.go('/home');
   }
 
   void _back() {

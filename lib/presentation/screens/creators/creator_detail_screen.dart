@@ -111,8 +111,12 @@ class CreatorDetailScreen extends ConsumerWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: () =>
-                      ref.read(followsProvider.notifier).toggle(creator.id),
+                  onPressed: () async {
+                      await ref.read(followsProvider.notifier).toggle(creator.id);
+                      // Refresh creator data so followers_count updates
+                      // (Supabase trigger increments/decrements the counter).
+                      ref.invalidate(creatorByIdProvider(creator.id));
+                    },
                   icon: Icon(
                       isFollowing ? Icons.check : Icons.add,
                       size: 18),
@@ -314,9 +318,23 @@ class _DetailTakeRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final catalog = ref.watch(catalogProvider).valueOrNull ?? [];
-    final content = catalog.where((c) => c.id == take.contentId).firstOrNull;
-    if (content == null) return const SizedBox.shrink();
+    // Load content individually — the catalog is limited to 600 titles,
+    // so takes for less-popular titles would silently disappear.
+    final contentAsync = ref.watch(contentByIdProvider(take.contentId));
+    final content = contentAsync.valueOrNull;
+    if (content == null) {
+      // Still loading or not found — show placeholder while loading.
+      if (contentAsync.isLoading) {
+        return const Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Center(child: SizedBox(
+            height: 20, width: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )),
+        );
+      }
+      return const SizedBox.shrink();
+    }
 
     final verdictColor = switch (take.verdict) {
       CreatorVerdict.worthIt => AppColors.accent,

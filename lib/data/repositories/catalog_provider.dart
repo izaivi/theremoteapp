@@ -34,10 +34,10 @@ final catalogProvider = FutureProvider<List<Content>>((ref) async {
       .order('tmdb_popularity', ascending: false)
       .limit(600);
 
-  // 2. Fetch availability for user's country (include deep_link).
+  // 2. Fetch availability for user's country.
   final availRows = await sb
       .from('content_availability')
-      .select('content_id, platform_id, monetization_type, deep_link')
+      .select('content_id, platform_id, monetization_type')
       .eq('country_code', country);
 
   // 3. Fetch platforms for name lookup.
@@ -46,23 +46,18 @@ final catalogProvider = FutureProvider<List<Content>>((ref) async {
     for (final p in platformRows) (p['id'] as int): p['name'] as String,
   };
 
-  // 4. Build availability index: tmdb_id → set of platform names + deep links.
+  // 4. Build availability index: tmdb_id → set of platform names.
   final availByContent = <int, Set<String>>{};
-  final deepLinksByContent = <int, Map<String, String>>{};
   for (final a in availRows) {
     final cid = a['content_id'] as int;
     final pid = a['platform_id'] as int;
     final name = platformNames[pid] ?? '?';
     availByContent.putIfAbsent(cid, () => {}).add(name);
-    final deepLink = a['deep_link'] as String?;
-    if (deepLink != null && deepLink.isNotEmpty) {
-      deepLinksByContent.putIfAbsent(cid, () => {})[name] = deepLink;
-    }
   }
 
   // 5. Map DB rows to Content model.
   return contentRows
-      .map((r) => _mapRowToContent(r, availByContent, deepLinksByContent))
+      .map((r) => _mapRowToContent(r, availByContent))
       .toList();
 });
 
@@ -85,7 +80,7 @@ final contentByIdProvider =
 
   final availRows = await sb
       .from('content_availability')
-      .select('content_id, platform_id, monetization_type, deep_link')
+      .select('content_id, platform_id, monetization_type')
       .eq('content_id', tmdbId)
       .eq('country_code', country);
 
@@ -95,19 +90,14 @@ final contentByIdProvider =
   };
 
   final availByContent = <int, Set<String>>{};
-  final deepLinksByContent = <int, Map<String, String>>{};
   for (final a in availRows) {
     final cid = a['content_id'] as int;
     final pid = a['platform_id'] as int;
     final name = platformNames[pid] ?? '?';
     availByContent.putIfAbsent(cid, () => {}).add(name);
-    final deepLink = a['deep_link'] as String?;
-    if (deepLink != null && deepLink.isNotEmpty) {
-      deepLinksByContent.putIfAbsent(cid, () => {})[name] = deepLink;
-    }
   }
 
-  return _mapRowToContent(rows.first, availByContent, deepLinksByContent);
+  return _mapRowToContent(rows.first, availByContent);
 });
 
 // ---------------------------------------------------------------------------
@@ -200,7 +190,6 @@ final bingeableProvider = FutureProvider<List<Content>>((ref) async {
 Content _mapRowToContent(
   Map<String, dynamic> r,
   Map<int, Set<String>> availByContent,
-  Map<int, Map<String, String>> deepLinksByContent,
 ) {
   final tmdbId = r['tmdb_id'] as int;
   final mediaType = r['media_type'] as String? ?? 'movie';
@@ -216,7 +205,6 @@ Content _mapRowToContent(
 
   // Available platforms for this title.
   final platforms = availByContent[tmdbId]?.toList() ?? [];
-  final deepLinks = deepLinksByContent[tmdbId] ?? {};
 
   return Content(
     id: tmdbId.toString(),
@@ -246,8 +234,9 @@ Content _mapRowToContent(
     metacriticScore: r['metacritic_score'] as int?,
     socialMentions: ((r['tmdb_popularity'] as num?) ?? 0).toInt() * 100,
     tags: const [],
+    director: r['director'] as String?,
+    cast: (r['cast_list'] as List<dynamic>?)?.cast<String>() ?? [],
     availablePlatforms: platforms,
-    platformDeepLinks: deepLinks,
   );
 }
 

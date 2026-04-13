@@ -6,12 +6,13 @@ import '../../../core/theme/app_colors.dart';
 import '../../../data/mock/mock_creators.dart';
 import '../../../data/models/content.dart';
 import '../../../data/models/creator.dart';
-import '../../../data/repositories/catalog_provider.dart';
+import '../../../data/repositories/catalog_provider.dart'; // contentByIdProvider
 import '../../../data/repositories/creators_provider.dart';
 import '../../../data/repositories/follows_repository.dart';
 import '../../../data/repositories/user_profile_repository.dart';
 import '../../../data/repositories/vault_repository.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../widgets/paywall_sheet.dart';
 import '../../widgets/user_avatar.dart';
 
 /// Creators — trusted voices.
@@ -203,8 +204,8 @@ class _FeaturedSkipCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final catalog = ref.watch(catalogProvider).valueOrNull ?? [];
-    final content = catalog.where((c) => c.id == take.contentId).firstOrNull;
+    final contentAsync = ref.watch(contentByIdProvider(take.contentId));
+    final content = contentAsync.valueOrNull;
     final creatorAsync = ref.watch(creatorByIdProvider(take.creatorId));
     final creator = creatorAsync.valueOrNull ?? MockCreators.byId(take.creatorId);
     if (content == null || creator == null) return const SizedBox.shrink();
@@ -418,11 +419,25 @@ class _TakeCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final catalog = ref.watch(catalogProvider).valueOrNull ?? [];
-    final content = catalog.where((c) => c.id == take.contentId).firstOrNull;
+    // Load content individually — the catalog is limited to 600 titles,
+    // so takes for less-popular titles would silently disappear.
+    final contentAsync = ref.watch(contentByIdProvider(take.contentId));
+    final content = contentAsync.valueOrNull;
     final creatorAsync = ref.watch(creatorByIdProvider(take.creatorId));
     final creator = creatorAsync.valueOrNull ?? MockCreators.byId(take.creatorId);
-    if (content == null || creator == null) return const SizedBox.shrink();
+    if (content == null) {
+      if (contentAsync.isLoading) {
+        return const Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Center(child: SizedBox(
+            height: 20, width: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )),
+        );
+      }
+      return const SizedBox.shrink();
+    }
+    if (creator == null) return const SizedBox.shrink();
 
     final verdictColor = switch (take.verdict) {
       CreatorVerdict.worthIt => AppColors.accent,
@@ -639,7 +654,14 @@ class _TakeActionsState extends ConsumerState<_TakeActions> {
           label: l10n.creatorActionSave,
           active: saved,
           onTap: () async {
-            await ctrl.toggleWatchlist(widget.content.id);
+            final ok = await ctrl.toggleWatchlist(
+              widget.content.id,
+              isPro: ref.read(isProProvider),
+            );
+            if (!ok && context.mounted) {
+              showPaywall(context);
+              return;
+            }
             if (!saved && context.mounted) {
               _snack(l10n.creatorTakeSaved);
             }

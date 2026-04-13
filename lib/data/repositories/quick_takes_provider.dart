@@ -105,6 +105,10 @@ Future<bool> submitQuickTake({
 
 /// Vote on a quick take. [vote] is 1 (thumbs up) or -1 (thumbs down).
 /// If the user already voted the same way, removes the vote.
+///
+/// Counter updates (thumbs_up / thumbs_down on quick_takes) are handled
+/// by a Supabase trigger on quick_take_votes — the Flutter code only
+/// needs to manage the vote row itself.
 Future<bool> voteQuickTake({
   required String quickTakeId,
   required String userId,
@@ -115,62 +119,28 @@ Future<bool> voteQuickTake({
     final sb = Supabase.instance.client;
 
     if (currentVote == vote) {
-      // Un-vote: remove existing vote and decrement counter.
+      // Un-vote: delete the vote row → trigger decrements counter.
       await sb
           .from('quick_take_votes')
           .delete()
           .eq('quick_take_id', quickTakeId)
           .eq('user_id', userId);
-      final field = vote == 1 ? 'thumbs_up' : 'thumbs_down';
-      await sb.rpc('decrement_field', params: {
-        'table_name': 'quick_takes',
-        'row_id': quickTakeId,
-        'field_name': field,
-      });
-      // Simpler: just update with raw SQL-style
-      // Actually, let's use a direct update approach
-      return true;
+    } else if (currentVote != 0) {
+      // Changing direction: update vote → trigger adjusts both counters.
+      await sb
+          .from('quick_take_votes')
+          .update({'vote': vote})
+          .eq('quick_take_id', quickTakeId)
+          .eq('user_id', userId);
     } else {
-      // New vote or change direction.
-      if (currentVote != 0) {
-        // Changing direction: remove old vote counter, add new.
-        final oldField = currentVote == 1 ? 'thumbs_up' : 'thumbs_down';
-        final newField = vote == 1 ? 'thumbs_up' : 'thumbs_down';
-        // Update vote record
-        await sb
-            .from('quick_take_votes')
-            .update({'vote': vote})
-            .eq('quick_take_id', quickTakeId)
-            .eq('user_id', userId);
-        // Update counters (increment new, decrement old)
-        final take = await sb
-            .from('quick_takes')
-            .select('thumbs_up, thumbs_down')
-            .eq('id', quickTakeId)
-            .single();
-        await sb.from('quick_takes').update({
-          oldField: (take[oldField] as int) - 1,
-          newField: (take[newField] as int) + 1,
-        }).eq('id', quickTakeId);
-      } else {
-        // Fresh vote.
-        await sb.from('quick_take_votes').insert({
-          'quick_take_id': quickTakeId,
-          'user_id': userId,
-          'vote': vote,
-        });
-        final field = vote == 1 ? 'thumbs_up' : 'thumbs_down';
-        final take = await sb
-            .from('quick_takes')
-            .select('thumbs_up, thumbs_down')
-            .eq('id', quickTakeId)
-            .single();
-        await sb.from('quick_takes').update({
-          field: (take[field] as int) + 1,
-        }).eq('id', quickTakeId);
-      }
-      return true;
+      // Fresh vote: insert → trigger increments counter.
+      await sb.from('quick_take_votes').insert({
+        'quick_take_id': quickTakeId,
+        'user_id': userId,
+        'vote': vote,
+      });
     }
+    return true;
   } catch (e) {
     // ignore: avoid_print
     print('[voteQuickTake] ERROR: $e');

@@ -42,8 +42,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     });
     try {
       await action();
-      if (mounted && context.canPop()) context.pop();
-      else if (mounted) context.go('/home');
+      if (mounted) context.go('/home');
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
@@ -121,22 +120,28 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       next.whenData((state) {
         if (!mounted) return;
         if (state.event == AuthChangeEvent.signedIn) {
-          if (context.canPop()) {
-            context.pop();
-          } else {
-            context.go('/home');
-          }
+          context.go('/home');
         }
       });
     });
 
+    // When the user lands on /auth as part of the mandatory entry flow
+    // (Splash → Auth → Quiz → Home) they don't yet have a session — the
+    // close button would just bounce them back here via the router redirect.
+    // Only show it if a session already exists (e.g. a signed-in guest who
+    // came here from Profile to upgrade to a real account).
+    final hasSession = ref.watch(currentUserProvider) != null;
+
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () =>
-              context.canPop() ? context.pop() : context.go('/home'),
-        ),
+        automaticallyImplyLeading: false,
+        leading: hasSession
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () =>
+                    context.canPop() ? context.pop() : context.go('/home'),
+              )
+            : null,
         title: const Text('Sign in'),
       ),
       body: SafeArea(
