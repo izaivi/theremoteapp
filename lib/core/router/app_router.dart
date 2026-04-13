@@ -79,9 +79,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return '/home';
       }
 
-      // Welcome gate and auth screen are always reachable — they're the
-      // entry surfaces before any session exists.
-      if (atSplash) return null;
+      // Welcome gate: show splash only to users without a live session.
+      // If Supabase restored a session from secure storage (typical cold
+      // start for returning users), skip the welcome screen entirely and
+      // send them straight to the quiz or home. Without this, the app
+      // always asks returning users to "sign in again" after a cold start
+      // because the CTA on splash unconditionally goes to /auth.
+      if (atSplash) {
+        if (signedIn) return done ? '/home' : '/onboarding';
+        return null;
+      }
+      // Auth screen is always reachable — it's the sign-in surface and
+      // also handles re-auth from Settings for signed-in users.
       if (atAuth) return null;
 
       // Not signed in → must authenticate first. Splash and Auth are the

@@ -5,6 +5,42 @@ Formato: sección por fecha, bullets cortos.
 
 ---
 
+## 2026-04-13 — Build 9: Fixes post-TestFlight Build 8
+
+Build 8 salió a TestFlight y Vivi cazó varios bugs de session management + cold start + long quiz. Build 9 ataca los más críticos.
+
+### Cold start → login loop (bug #5)
+- **Síntoma**: cerrar la app sin Sign Out, abrirla, te pide volver a logearte aunque la sesión siga viva en Supabase.
+- **Causa**: el CTA de splash iba `context.go('/auth')` sin checar si ya había sesión. Returning user → splash → CTA → auth aunque currentUser != null.
+- **Fix en `app_router.dart`**: si `atSplash && signedIn`, redirige a `/onboarding` (si falta quiz) o `/home`. Returning users ya no ven splash en cold start.
+
+### Long Quiz ❤️ no llegaba a Bóveda (bug #2)
+- **Síntoma**: doble tap en corazón en grid del long quiz → se guarda como `lovedRecentIds` en QuizAnswers, pero NO aparece en Mi Bóveda ni en ratings. UX decepcionante: "le di ❤️ pero mi bóveda sigue igual".
+- **Fix en `long_quiz_screen.dart`**: después de `completeLongQuiz`, itera sobre `lovedIds` y llama `vaultProvider.toggleLoved(id)` + `ratingsProvider.setRating(id, 5)` para cada uno. Los ❤️ del quiz ahora aparecen en Bóveda (loved) Y en Mis Puntuaciones (5★).
+- Lógica idempotente: si ya estaba loved, no duplica; si ya había rating, lo actualiza a 5.
+
+### Session leak entre usuarios (bugs #6, #8)
+- **Síntoma**: al cambiar de cuenta Apple → Google, se veía la Bóveda del usuario anterior. Los thumbs up de quick takes también persistían de la sesión anterior.
+- **Causa raíz**: el listener de `authStateChangesProvider` en `main.dart` limpiaba/refrescaba profile/ratings/vault/follows pero NO invalidaba los `FutureProvider.family` de quick takes (que cachean por contentId y leen `user_id` internamente). El estado "mi voto" se quedaba cacheado del user viejo.
+- **Fix en `main.dart`**: agregados `ref.invalidate(quickTakesByContentProvider)` y `ref.invalidate(quickTakesTodayCountProvider)` en los handlers de `signedIn` Y `signedOut`. Riverpod purga toda la family → próxima lectura re-fetch con el user nuevo.
+
+### Follow counter sin incrementar (bug #3)
+- **Síntoma**: seguir a un creador → botón dice "Following", pero el contador del perfil sigue en el valor viejo y el creador no aparece en la sección "Siguiendo" de Bóveda.
+- **Causa raíz**: la sección 2 del migration `2026-04-13_vote_and_follow_triggers.sql` quedó pendiente por type mismatch entre `user_follows.creator_id text` y `creators.id uuid`. Sin trigger, `followers_count` nunca se actualiza.
+- **Fix**: nuevo migration `2026-04-13_follow_counter_fix.sql` que:
+  1. Migra `user_follows.creator_id` de `text` a `uuid` (TRUNCATE previo — follows pre-launch son baratos de rebuild).
+  2. Agrega FK a `creators(id) ON DELETE CASCADE`.
+  3. Crea trigger `trg_follower_count` con `SECURITY DEFINER` que incrementa/decrementa `followers_count` en INSERT/DELETE.
+  4. Backfill de `followers_count` desde las filas existentes.
+- Vivi corre este SQL en Supabase SQL Editor una vez antes de probar Build 9.
+
+### Pendientes Build 9 (no incluidos)
+- **Premium IAP en TestFlight**: necesito el error exacto del TestFlight real (no simulador) para diagnosticar. Posible cache del SDK de RevenueCat, o productos "Ready to Submit" faltantes en App Store Connect.
+- **Remoty + Anime**: el engine confunde anime con animación general. Agregar intent/filtro por `genre_ids` + `origin_country=JP`. Baja prioridad.
+- **SharedPreferences keys user-scoped**: los repos locales (vault/ratings/follows) usan una única key por device (`vault.v1` etc.). El clear+refresh del listener lo compensa, pero sería más robusto keyar por user_id. Refactor de mayor alcance, Build 10+.
+
+---
+
 ## 2026-04-13 — Build 8: Onboarding gating + Quick Takes counters + RevenueCat bundle fix
 
 ### Quick Takes — contador thumbs up/down arreglado

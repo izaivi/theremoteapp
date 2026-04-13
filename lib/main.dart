@@ -9,6 +9,7 @@ import 'core/supabase/supabase_client.dart';
 import 'core/theme/app_theme.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/follows_repository.dart';
+import 'data/repositories/quick_takes_provider.dart';
 import 'data/repositories/ratings_repository.dart';
 import 'data/repositories/user_profile_repository.dart';
 import 'data/repositories/vault_repository.dart';
@@ -62,6 +63,12 @@ class TheRemoteApp extends ConsumerWidget {
           await ref.read(ratingsProvider.notifier).clearLocal();
           await ref.read(vaultProvider.notifier).clear();
           await ref.read(followsProvider.notifier).clearLocal();
+          // Nuke any cached FutureProvider.family results that keyed by the
+          // OLD user's id (quick takes "my vote" state, today-count, etc.).
+          // Without this, the previous user's thumbs-up state bleeds into
+          // the new session until the screen is cold-rebuilt.
+          ref.invalidate(quickTakesByContentProvider);
+          ref.invalidate(quickTakesTodayCountProvider);
           await ref.read(userProfileProvider.notifier).refreshFromRemote();
           await ref.read(ratingsProvider.notifier).refreshFromRemote();
           await ref.read(vaultProvider.notifier).refreshFromRemote();
@@ -81,6 +88,8 @@ class TheRemoteApp extends ConsumerWidget {
           await ref.read(ratingsProvider.notifier).clearLocal();
           await ref.read(vaultProvider.notifier).clear();
           await ref.read(followsProvider.notifier).clearLocal();
+          ref.invalidate(quickTakesByContentProvider);
+          ref.invalidate(quickTakesTodayCountProvider);
         }
       });
     });

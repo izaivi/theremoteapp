@@ -6,6 +6,8 @@ import '../../../core/theme/app_colors.dart';
 import '../../../data/mock/mock_content.dart';
 import '../../../data/models/content.dart';
 import '../../../data/repositories/catalog_provider.dart';
+import '../../../data/repositories/ratings_repository.dart';
+import '../../../data/repositories/vault_repository.dart';
 import '../../../data/models/user_profile.dart';
 import '../../../data/repositories/user_profile_repository.dart';
 import '../../../l10n/app_localizations.dart';
@@ -75,6 +77,22 @@ class _LongQuizScreenState extends ConsumerState<LongQuizScreen> {
             favoriteThemes: themes,
           ),
         );
+
+    // The ❤️ taps in the grid are a strong taste signal — mirror them into
+    // the Vault (as "loved") and into Ratings (as 5★) so the user sees
+    // their picks reflected in their library right away. Without this, the
+    // long quiz feels disconnected from the rest of the app: Home still
+    // shows the same 5 Gems the user just told us they don't care about.
+    final vault = ref.read(vaultProvider.notifier);
+    final ratings = ref.read(ratingsProvider.notifier);
+    for (final id in lovedIds) {
+      // toggleLoved only adds if not already loved — idempotent.
+      if (!ref.read(vaultProvider).isLoved(id)) {
+        await vault.toggleLoved(id);
+      }
+      await ratings.setRating(id, 5);
+    }
+
     if (!mounted) return;
     _showDoneAndPop();
   }
