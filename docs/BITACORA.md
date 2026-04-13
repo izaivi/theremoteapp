@@ -5,9 +5,9 @@ Formato: sección por fecha, bullets cortos.
 
 ---
 
-## 2026-04-13 — Build 9: Fixes post-TestFlight Build 8
+## 2026-04-13 — Build 10: Fixes post-TestFlight Build 8
 
-Build 8 salió a TestFlight y Vivi cazó varios bugs de session management + cold start + long quiz. Build 9 ataca los más críticos.
+Build 8 salió a TestFlight y Vivi cazó varios bugs de session management + cold start + long quiz. Build 10 ataca los más críticos.
 
 ### Cold start → login loop (bug #5)
 - **Síntoma**: cerrar la app sin Sign Out, abrirla, te pide volver a logearte aunque la sesión siga viva en Supabase.
@@ -32,9 +32,9 @@ Build 8 salió a TestFlight y Vivi cazó varios bugs de session management + col
   2. Agrega FK a `creators(id) ON DELETE CASCADE`.
   3. Crea trigger `trg_follower_count` con `SECURITY DEFINER` que incrementa/decrementa `followers_count` en INSERT/DELETE.
   4. Backfill de `followers_count` desde las filas existentes.
-- Vivi corre este SQL en Supabase SQL Editor una vez antes de probar Build 9.
+- Vivi corre este SQL en Supabase SQL Editor una vez antes de probar Build 10.
 
-### Pendientes Build 9 (no incluidos)
+### Pendientes Build 10 (no incluidos)
 - **Premium IAP en TestFlight**: necesito el error exacto del TestFlight real (no simulador) para diagnosticar. Posible cache del SDK de RevenueCat, o productos "Ready to Submit" faltantes en App Store Connect.
 - **Remoty + Anime**: el engine confunde anime con animación general. Agregar intent/filtro por `genre_ids` + `origin_country=JP`. Baja prioridad.
 - **SharedPreferences keys user-scoped**: los repos locales (vault/ratings/follows) usan una única key por device (`vault.v1` etc.). El clear+refresh del listener lo compensa, pero sería más robusto keyar por user_id. Refactor de mayor alcance, Build 10+.
