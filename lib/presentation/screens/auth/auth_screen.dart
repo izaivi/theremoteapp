@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show AuthChangeEvent;
 
 import '../../../core/theme/app_colors.dart';
 import '../../../data/repositories/auth_repository.dart';
@@ -50,16 +49,46 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     }
   }
 
-  Future<void> _doApple() => _run(() async {
-        await ref.read(authRepositoryProvider).signInWithApple();
+  /// Apple, like Google, does NOT navigate inline. Earlier we used `_run(...)`
+  /// here which synchronously calls `context.go('/home')` the moment the
+  /// native Apple sheet resolves. That raced with the `AuthChangeEvent.signedIn`
+  /// listener below (which ALSO navigates to /home) and with main.dart's
+  /// signedIn handler that triggers `refreshFromRemote` on all repositories
+  /// — the first rebuild of /auth during that window sometimes landed back
+  /// on the auth screen ("veo mi carita y regresa al login" in Build 12).
+  ///
+  /// Fix: let the listener own navigation. Keep `_busy = true` until either
+  /// (a) `signedIn` fires and we route away, or (b) the user cancels Apple.
+  /// Same pattern as `_doGoogle`.
+  Future<void> _doApple() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await ref.read(authRepositoryProvider).signInWithApple();
+      // Grace window for the deep-link + signedIn event. If the listener
+      // hasn't navigated us away in 2s, clear busy so buttons re-enable
+      // (covers "user cancelled Apple sheet" case on some iOS versions).
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted && _busy) setState(() => _busy = false);
       });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _busy = false;
+        });
+      }
+    }
+  }
 
-  /// Google uses Supabase's OAuth browser flow: we launch
-  /// ASWebAuthenticationSession and then sit on the auth screen until the
-  /// deep link round-trip finishes and `authStateChangesProvider` emits
-  /// `signedIn` (handled by the ref.listen in [build]). We therefore do NOT
-  /// navigate here — calling context.go('/home') right after signInWithGoogle
-  /// returns would fire while the user is still in the browser.
+  /// Google uses the native iOS Google Sign-In sheet (Build 15+). The sheet
+  /// presents inline, the user picks an account, the OS dismisses the sheet,
+  /// and `signInWithGoogle` returns an `AuthResponse` once the id_token has
+  /// been exchanged with Supabase. We don't navigate inline — the
+  /// `currentUserProvider` listener in [build] detects null → User and
+  /// routes to /home. Same pattern as `_doApple`.
   Future<void> _doGoogle() async {
     setState(() {
       _busy = true;
@@ -67,11 +96,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     });
     try {
       await ref.read(authRepositoryProvider).signInWithGoogle();
-      // Keep _busy = true so the spinner stays up until either (a) the
-      // auth state listener navigates us away, or (b) the user cancels and
-      // returns to the auth screen. In case (b) we want to re-enable the
-      // buttons — handle that by clearing _busy after a short grace period
-      // if no signedIn event arrived.
+      // Grace window: if the user cancels the Google sheet we get back
+      // here quickly and want the buttons re-enabled.
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted && _busy) setState(() => _busy = false);
       });
@@ -101,36 +127,56 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     });
     try {
       await ref.read(authRepositoryProvider).signInWithMagicLink(email);
-      if (mounted) setState(() => _magicSent = true);
+      // Supabase has queued the 6-digit code email. Route to the OTP verify
+      // screen where the user types the code. The old "check your inbox and
+      // click the link" flow was replaced in Build 13 because Apple Mail
+      // prefetch consumed the token and forced two clicks.
+      if (mounted) {
+        setState(() {
+          _magicSent = true;
+          _busy = false;
+        });
+        context.push('/auth/otp', extra: email);
+      }
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _busy = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // When the deep-link round-trip for Google OAuth (or Magic Link) finishes,
-    // Supabase emits AuthChangeEvent.signedIn. If we're still sitting on the
-    // auth screen at that moment, pop/navigate to home. This is the piece
-    // that closes the loop for the OAuth flow, since _doGoogle doesn't
-    // navigate synchronously.
-    ref.listen(authStateChangesProvider, (prev, next) {
-      next.whenData((state) {
-        if (!mounted) return;
-        if (state.event == AuthChangeEvent.signedIn) {
-          context.go('/home');
-        }
-      });
+    // Navigation strategy (Build 15): react to `currentUserProvider` going
+    // from null → User instead of trying to capture `AuthChangeEvent.signedIn`
+    // exactly. In Build 14 the AuthState event-based listener sometimes missed
+    // the transition (whenData drops AsyncLoading frames, and the event can
+    // arrive before ref.listen is wired on the first frame) — Apple login
+    // authenticated correctly but the auth screen stayed up until the user
+    // manually pressed the X that appeared once hasSession became true.
+    //
+    // Watching the derived `currentUserProvider` fires on every rebuild after
+    // Supabase writes the session, regardless of which AuthState event got
+    // us there. Same navigation for Apple, Google, Magic Link, Guest — no
+    // need to special-case per flow.
+    final user = ref.watch(currentUserProvider);
+    ref.listen(currentUserProvider, (prev, next) {
+      if (!mounted) return;
+      if (prev == null && next != null) {
+        // null → signed in. Route to /home. The router's redirect logic will
+        // bounce the user to /quiz if they still need onboarding.
+        context.go('/home');
+      }
     });
 
-    // When the user lands on /auth as part of the mandatory entry flow
-    // (Splash → Auth → Quiz → Home) they don't yet have a session — the
-    // close button would just bounce them back here via the router redirect.
-    // Only show it if a session already exists (e.g. a signed-in guest who
-    // came here from Profile to upgrade to a real account).
-    final hasSession = ref.watch(currentUserProvider) != null;
+    // Close button only makes sense when a session already exists (e.g. a
+    // signed-in guest who came here from Profile to upgrade). First-time
+    // users landing on /auth via Splash → Auth → Quiz → Home don't have one
+    // yet — the close button would just bounce back here via the redirect.
+    final hasSession = user != null;
 
     return Scaffold(
       appBar: AppBar(

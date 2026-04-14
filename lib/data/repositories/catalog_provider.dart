@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -5,7 +7,9 @@ import '../../core/prefs/language_prefs.dart';
 import '../../core/supabase/supabase_client.dart';
 import '../mock/mock_content.dart';
 import '../models/content.dart';
+import '../models/user_profile.dart';
 import 'auth_repository.dart';
+import 'user_profile_repository.dart';
 
 /// ------------------------------------------------------------------
 /// Catalog provider — reads from Supabase `content` + `content_availability`
@@ -105,19 +109,27 @@ final contentByIdProvider =
 // but reading from the catalog provider.
 // ---------------------------------------------------------------------------
 
-/// Trending = top by TMDB popularity (stand-in until Watcher Score Fase 2).
+/// Trending = top by TMDB popularity, filtered by user's active platforms.
 final trendingProvider = FutureProvider<List<Content>>((ref) async {
   final catalog = await ref.watch(catalogProvider.future);
-  return catalog.take(20).toList(); // already sorted by tmdb_popularity desc
+  final profile = ref.watch(userProfileProvider);
+  return catalog
+      .where((c) => _matchesPlatforms(c, profile))
+      .take(20)
+      .toList();
 });
 
 /// Exploding = recent + high popularity spike (heuristic: release_year recent
 /// + high popularity). Placeholder until we have real trend signals.
 final explodingProvider = FutureProvider<List<Content>>((ref) async {
   final catalog = await ref.watch(catalogProvider.future);
+  final profile = ref.watch(userProfileProvider);
   final now = DateTime.now().year;
   return catalog
-      .where((c) => c.year >= now - 1 && c.tmdbId != null)
+      .where((c) =>
+          c.year >= now - 1 &&
+          c.tmdbId != null &&
+          _matchesPlatforms(c, profile))
       .take(15)
       .toList();
 });
@@ -125,15 +137,20 @@ final explodingProvider = FutureProvider<List<Content>>((ref) async {
 /// Quick decision = movies under 115 min, sorted by popularity.
 final quickDecisionProvider = FutureProvider<List<Content>>((ref) async {
   final catalog = await ref.watch(catalogProvider.future);
+  final profile = ref.watch(userProfileProvider);
   return catalog
       .where((c) =>
-          c.type == ContentType.movie && c.durationMinutes <= 115)
+          c.type == ContentType.movie &&
+          c.durationMinutes <= 115 &&
+          _matchesPlatforms(c, profile))
       .take(15)
       .toList();
 });
 
 /// Don't waste = lowest scored content with some popularity (anti-rec).
 /// Placeholder: titles with low imdb scores but high popularity.
+/// Platform-agnostic on purpose — the warning applies regardless of where it
+/// streams.
 final dontWasteProvider = FutureProvider<List<Content>>((ref) async {
   final catalog = await ref.watch(catalogProvider.future);
   final withScores = catalog.where((c) => c.imdbScore != null && c.imdbScore! < 5.5).toList()
@@ -141,26 +158,88 @@ final dontWasteProvider = FutureProvider<List<Content>>((ref) async {
   return withScores.take(10).toList();
 });
 
-/// Daily gems = high-quality hidden gems (high score + lower popularity).
-/// Placeholder until Watcher Score Fase 2.
+/// Daily gems = the 5 personalized picks for Home.
+///
+/// Composite score (IMDb, RT, Metacritic, TMDB/Watcher) with a ≥2-source
+/// quality gate, a creator-take 1.5x boost, plus a profile bonus for genre
+/// overlap, favoriteThemes matches (director/cast), and sessionLength fit.
+///
+/// The final 5 are picked with a deterministic daily shuffle over the top 30,
+/// seeded by `hash(userId + date)` — same user sees the same 5 all day, new 5
+/// tomorrow. Cascading fallback drops the quality gate, then the platform
+/// filter, if the pool is too thin.
 final dailyGemsProvider = FutureProvider<List<Gem>>((ref) async {
   if (!SupabaseConfig.isConfigured) return MockContent.dailyGems;
-  final catalog = await ref.watch(catalogProvider.future);
-  // Pick titles with good IMDb score but NOT in the top-20 popularity.
-  final pool = catalog
-      .where((c) => c.imdbScore != null && c.imdbScore! >= 7.5)
-      .skip(20) // skip the trending ones
-      .take(20)
-      .toList()
-    ..sort((a, b) => (b.imdbScore ?? 0).compareTo(a.imdbScore ?? 0));
 
-  return pool.take(5).indexed.map((e) {
+  final catalog = await ref.watch(catalogProvider.future);
+  final profile = ref.watch(userProfileProvider);
+
+  // Creator takes with is_curated=true → 1.5x boost on composite score.
+  final Set<int> curatedTmdbIds = {};
+  try {
+    final sb = Supabase.instance.client;
+    final takes = await sb
+        .from('creator_takes')
+        .select('content_id, creators!inner(is_curated)')
+        .eq('creators.is_curated', true);
+    for (final t in (takes as List)) {
+      final cid = t['content_id'];
+      if (cid is int) curatedTmdbIds.add(cid);
+    }
+  } catch (_) {
+    // Boost, not a requirement — continue without it.
+  }
+
+  // Exclude already-watched (Long Quiz seed + runtime) and dismissed titles.
+  final excluded = {...profile.watchedIds, ...profile.dismissedIds};
+
+  bool baseFilter(Content c) =>
+      !excluded.contains(c.id) && _matchesPlatforms(c, profile);
+
+  // Pool 1: platform + quality gate.
+  List<Content> candidates =
+      catalog.where((c) => baseFilter(c) && _passesQualityGate(c)).toList();
+
+  // Cascade 1: drop quality gate if pool is thin.
+  if (candidates.length < 15) {
+    candidates = catalog.where(baseFilter).toList();
+  }
+  // Cascade 2: drop platform filter if pool is still thin.
+  if (candidates.length < 5) {
+    candidates = catalog.where((c) => !excluded.contains(c.id)).toList();
+  }
+  // Last resort: unfiltered.
+  if (candidates.isEmpty) {
+    candidates = List<Content>.from(catalog);
+  }
+
+  double scoreOf(Content c) {
+    double base = _compositeScore(c);
+    if (curatedTmdbIds.contains(c.tmdbId)) base *= 1.5;
+    return base + _profileBonus(c, profile);
+  }
+
+  candidates.sort((a, b) => scoreOf(b).compareTo(scoreOf(a)));
+  final top = candidates.take(30).toList();
+
+  // Daily rotation: deterministic shuffle seeded by user+date.
+  final now = DateTime.now();
+  final dateKey =
+      '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  final seed = (profile.id ?? 'anon').hashCode ^ dateKey.hashCode;
+  top.shuffle(math.Random(seed));
+  final chosen = top.take(5).toList()
+    ..sort((a, b) => scoreOf(b).compareTo(scoreOf(a)));
+
+  return chosen.indexed.map((e) {
     final (i, c) = e;
+    final hasCurated = curatedTmdbIds.contains(c.tmdbId);
     return Gem(
       content: c,
       gemRank: (5 - i).toDouble(),
-      reason: 'High ratings, low noise — worth discovering.',
-      tierVisibility: i < 3 ? UserPlan.free : UserPlan.pro,
+      reason: _reasonFor(c, profile, hasCurated),
+      // Free tier sees the 2 lowest-ranked gems as a tease; Pro sees all 5.
+      tierVisibility: i >= 3 ? UserPlan.free : UserPlan.pro,
     );
   }).toList();
 });
@@ -168,17 +247,21 @@ final dailyGemsProvider = FutureProvider<List<Gem>>((ref) async {
 /// Popular in region (Discover idle section).
 final popularInRegionProvider = FutureProvider<List<Content>>((ref) async {
   final catalog = await ref.watch(catalogProvider.future);
+  final profile = ref.watch(userProfileProvider);
   return catalog
-      .where((c) => c.availablePlatforms.isNotEmpty)
+      .where((c) =>
+          c.availablePlatforms.isNotEmpty && _matchesPlatforms(c, profile))
       .take(20)
       .toList();
 });
 
-/// Bingeable series = series sorted by popularity.
+/// Bingeable series = series sorted by popularity, filtered by user platforms.
 final bingeableProvider = FutureProvider<List<Content>>((ref) async {
   final catalog = await ref.watch(catalogProvider.future);
+  final profile = ref.watch(userProfileProvider);
   return catalog
-      .where((c) => c.type == ContentType.series)
+      .where((c) =>
+          c.type == ContentType.series && _matchesPlatforms(c, profile))
       .take(15)
       .toList();
 });
@@ -269,4 +352,132 @@ String _tmdbGenreName(int id) {
     10765: 'Sci-Fi', 10766: 'Soap', 10767: 'Talk', 10768: 'Politics',
   };
   return map[id] ?? 'Other';
+}
+
+// ---------------------------------------------------------------------------
+// Fase 2a-1 — scoring & personalization helpers
+// ---------------------------------------------------------------------------
+//
+// Philosophy: we are NOT an IMDb/RT mirror. Quality requires a cross-source
+// consensus (≥2 sources passing the gate) so bot-reviewed outliers don't
+// dominate. Personalization (genres, themes, sessionLength) is additive bonus
+// on top of the quality base — a great title always beats a mediocre one that
+// happens to share a genre, but between two quality titles, the one that
+// matches the user's taste wins.
+
+/// Quality gate thresholds. Content needs to clear ≥2 of these to be
+/// considered "quality" for Daily Gems.
+const double _kImdbGate = 7.2;
+const int _kRtGate = 75;
+const int _kMetaGate = 65;
+const int _kWatcherGate = 70; // 0-100 scale (tmdb vote_average 7.0 * 10)
+
+/// Number of quality sources this content clears.
+int _qualitySourceCount(Content c) {
+  var n = 0;
+  if (c.imdbScore != null && c.imdbScore! >= _kImdbGate) n++;
+  if (c.rottenTomatoesCriticsScore != null &&
+      c.rottenTomatoesCriticsScore! >= _kRtGate) n++;
+  if (c.metacriticScore != null && c.metacriticScore! >= _kMetaGate) n++;
+  if (c.watcherScore >= _kWatcherGate) n++;
+  return n;
+}
+
+bool _passesQualityGate(Content c) => _qualitySourceCount(c) >= 2;
+
+/// Composite quality score 0-100 — average of available sources normalized
+/// to the same scale. TMDB-derived watcherScore is always present; IMDb/RT/
+/// Metacritic are opportunistic.
+double _compositeScore(Content c) {
+  final parts = <double>[];
+  if (c.imdbScore != null) parts.add(c.imdbScore! * 10); // 0-10 → 0-100
+  if (c.rottenTomatoesCriticsScore != null) {
+    parts.add(c.rottenTomatoesCriticsScore!.toDouble());
+  }
+  if (c.metacriticScore != null) parts.add(c.metacriticScore!.toDouble());
+  parts.add(c.watcherScore.toDouble());
+  return parts.reduce((a, b) => a + b) / parts.length;
+}
+
+/// Profile-match bonus. Additive on top of composite score.
+///   +15 per genre overlap, capped at +45 (3 matches).
+///   +10 per favoriteTheme match against director/cast, capped at +30.
+///   +10 if duration matches user's sessionLength window.
+double _profileBonus(Content c, UserProfile p) {
+  double bonus = 0;
+
+  // Genre overlap.
+  final genreMatches =
+      c.genres.toSet().intersection(p.favoriteGenres.toSet()).length;
+  bonus += math.min(genreMatches, 3) * 15.0;
+
+  // favoriteThemes → director + cast. Substring match (case-insensitive) so
+  // "Keanu Reeves" matches "Keanu Reeves" in the cast list and "Villeneuve"
+  // matches a director field.
+  if (p.favoriteThemes.isNotEmpty) {
+    final themesLower =
+        p.favoriteThemes.map((t) => t.toLowerCase().trim()).toList();
+    var themeHits = 0;
+    final director = c.director?.toLowerCase() ?? '';
+    final castLower = c.cast.map((n) => n.toLowerCase()).toList();
+    for (final theme in themesLower) {
+      if (theme.isEmpty) continue;
+      if (director.contains(theme) ||
+          castLower.any((name) => name.contains(theme))) {
+        themeHits++;
+        if (themeHits >= 3) break;
+      }
+    }
+    bonus += themeHits * 10.0;
+  }
+
+  // SessionLength soft bonus.
+  final mins = c.durationMinutes;
+  if (mins > 0) {
+    switch (p.sessionLength) {
+      case SessionLength.short:
+        if (mins <= 95) bonus += 10;
+        break;
+      case SessionLength.medium:
+        if (mins >= 85 && mins <= 180) bonus += 10;
+        break;
+      case SessionLength.long:
+        if (mins >= 120) bonus += 10;
+        break;
+    }
+  }
+
+  return bonus;
+}
+
+/// Platform filter: if the user selected platforms in the Fast Quiz, only
+/// keep content available on at least one of them. If no availability data
+/// is known for a title (empty list), we hide it — the user wants their
+/// platforms, not an open question. If the user selected no platforms at
+/// all (shouldn't happen post-quiz but defensively), we pass everything.
+bool _matchesPlatforms(Content c, UserProfile p) {
+  if (p.activePlatforms.isEmpty) return true;
+  if (c.availablePlatforms.isEmpty) return false;
+  final userSet = p.activePlatforms.toSet();
+  return c.availablePlatforms.any(userSet.contains);
+}
+
+/// Short human reason string for why a Gem was chosen. Priority:
+///   1. Curated creator take (highest-signal, most honest).
+///   2. Genre match with the user's favorites.
+///   3. Cross-source consensus (3+ sources).
+///   4. Generic fallback.
+String _reasonFor(Content c, UserProfile p, bool hasCuratedTake) {
+  if (hasCuratedTake) {
+    return 'Curated pick — our creators weigh in on this one.';
+  }
+  final genreMatches =
+      c.genres.toSet().intersection(p.favoriteGenres.toSet());
+  if (genreMatches.isNotEmpty) {
+    return 'Matches your taste in ${genreMatches.first}.';
+  }
+  if (_qualitySourceCount(c) >= 3) {
+    return 'Rare consensus — critics and audiences agree.';
+  }
+  return 'High ratings, low noise — worth discovering.';
 }

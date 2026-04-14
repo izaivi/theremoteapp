@@ -7,6 +7,7 @@ import '../../data/models/user_profile.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/user_profile_repository.dart';
 import '../../presentation/screens/auth/auth_screen.dart';
+import '../../presentation/screens/auth/otp_verify_screen.dart';
 import '../../presentation/screens/chat/chat_screen.dart';
 import '../../presentation/screens/content/content_screen.dart';
 import '../../presentation/screens/creators/creator_detail_screen.dart';
@@ -58,7 +59,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final fullLoc = state.uri.toString();
       final atOnboarding = loc == '/onboarding';
       final atSplash = loc == '/splash';
-      final atAuth = loc == '/auth';
+      // `/auth` and any subpath like `/auth/otp` — all are pre-auth surfaces
+      // that should NOT bounce the user back to /auth itself.
+      final atAuth = loc == '/auth' || loc.startsWith('/auth/');
       final signedIn = user != null;
       final done = profile.quizCompletion != QuizCompletion.none;
 
@@ -152,6 +155,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/auth',
         builder: (_, __) => const AuthScreen(),
+        routes: [
+          // Magic Link OTP verification — pushed from /auth after the user
+          // requests a code. Email is passed via `extra`.
+          GoRoute(
+            path: 'otp',
+            builder: (_, state) {
+              final email = state.extra is String ? state.extra as String : '';
+              return OtpVerifyScreen(email: email);
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: '/content/:id',

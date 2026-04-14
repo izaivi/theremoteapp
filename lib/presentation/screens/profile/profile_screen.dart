@@ -41,7 +41,13 @@ class ProfileScreen extends ConsumerWidget {
     final langCtrl = ref.read(languagePrefsProvider.notifier);
     final profile = ref.watch(userProfileProvider);
     final isPro = profile.tier == 'pro';
-    final isSignedIn = profile.id != null;
+    // Source of truth for sign-in is Supabase Auth (currentUser), NOT the
+    // local profile mirror. `profile.id` is populated by `refreshFromRemote`
+    // which can lag, fail silently, or be wiped by a stray factory call.
+    // Watching `currentUserProvider` keeps this in lockstep with the router's
+    // own `signedIn` check and with reality.
+    final currentUser = ref.watch(currentUserProvider);
+    final isSignedIn = currentUser != null;
 
     void comingSoon() {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -110,6 +116,7 @@ class ProfileScreen extends ConsumerWidget {
           _AccountCard(
             isSignedIn: isSignedIn,
             alias: profile.alias,
+            email: currentUser?.email,
             avatarKey: profile.avatarKey,
             onSignIn: () => context.push('/auth'),
           ),
@@ -834,12 +841,14 @@ class _PtlBrandingCard extends StatelessWidget {
 class _AccountCard extends StatelessWidget {
   final bool isSignedIn;
   final String? alias;
+  final String? email;
   final String? avatarKey;
   final VoidCallback onSignIn;
 
   const _AccountCard({
     required this.isSignedIn,
     required this.alias,
+    required this.email,
     required this.avatarKey,
     required this.onSignIn,
   });
@@ -884,14 +893,22 @@ class _AccountCard extends StatelessWidget {
                       fontSize: 17, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 2),
+                // When signed in, show the email of the active auth account
+                // so the user always knows which provider/identity they're
+                // logged in as. Apple users with "Hide My Email" will see
+                // their relay address (xxxx@privaterelay.appleid.com) — that
+                // IS the account email Supabase stores, so it's accurate.
+                // Guests (anonymous) have no email → fall back to the label.
                 Text(
                   isSignedIn
-                      ? l10n.profileAlias
+                      ? (email ?? l10n.profileAlias)
                       : l10n.profileNotSignedInSub,
                   style: TextStyle(
                     fontSize: 12,
                     color: Theme.of(context).textTheme.bodySmall?.color,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),

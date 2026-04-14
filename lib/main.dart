@@ -11,6 +11,7 @@ import 'data/repositories/auth_repository.dart';
 import 'data/repositories/follows_repository.dart';
 import 'data/repositories/quick_takes_provider.dart';
 import 'data/repositories/ratings_repository.dart';
+import 'data/repositories/subscription_repository.dart';
 import 'data/repositories/user_profile_repository.dart';
 import 'data/repositories/vault_repository.dart';
 import 'l10n/app_localizations.dart';
@@ -38,6 +39,16 @@ class TheRemoteApp extends ConsumerWidget {
     final locale = ref.watch(uiLocaleProvider);
     final router = ref.watch(appRouterProvider);
 
+    // Force-instantiate the SubscriptionController so the RevenueCat
+    // CustomerInfo listener registers at boot. Without this read, nothing
+    // else in the app watches `subscriptionProvider`, so the controller
+    // would never initialize, the entitlement stream would never fire, and
+    // `profiles.tier` would never sync from RevenueCat → Supabase. That
+    // was the root cause of "paywall greets me but every padlock stays
+    // locked" in Build 12. StateNotifierProvider is keepAlive by default,
+    // so a single read is enough to keep it around.
+    ref.read(subscriptionProvider);
+
     // When the auth state flips to "signed in" (any provider, including
     // anonymous), pull all 4 user-owned datasets from Supabase and merge
     // them into local state. The push direction is handled fire-and-forget
@@ -47,18 +58,34 @@ class TheRemoteApp extends ConsumerWidget {
         if (state.event == AuthChangeEvent.signedIn) {
           // Switch user context for the per-account datasets (vault, ratings,
           // follows) — these MUST wipe-then-pull to avoid leaking rows across
-          // accounts. We deliberately DO NOT reset the profile: doing so
-          // would flip quizCompletion to `none`, which causes the router's
-          // profile listener to briefly redirect to /onboarding and then
-          // back to /home, manifesting as a black/flashing Home on login.
-          // It would also nuke any alias the user set locally before a push
-          // round-tripped to Supabase, leading to data loss on subsequent
-          // sign-ins. refreshFromRemote handles the profile switch safely.
-
+          // accounts.
+          //
+          // Profile reset rule (Build 15, "Rayo McQueen" fix):
+          //   reset the local profile ONLY when the incoming session's user
+          //   id differs from the one already cached locally. That's the
+          //   real "user switch" case (including anonymous → real, real A
+          //   → real B, or a fresh install re-signing in). For a token
+          //   refresh or a re-emit of the same session, ids match and we
+          //   skip the reset — which is what the old "never reset" comment
+          //   was actually trying to protect against (black/flashing Home
+          //   because quizCompletion briefly flipped to `none` during the
+          //   pre-`refreshFromRemote` window).
+          //
+          // Without this reset, SharedPreferences kept the previous user's
+          // `quizCompletion = fast/long`, and combined with the old
+          // asymmetric merge in refreshFromRemote (local wins when remote
+          // is `none`), a brand-new account got shoved straight to /home,
+          // skipping the quiz and leaving 5 Gems empty.
+          //
           // Identify RevenueCat user so purchases are tied to the Supabase
           // account, not the device. Must happen before any purchase calls.
           final uid = state.session?.user.id;
           if (uid != null) await identifyRevenueCatUser(uid);
+
+          final currentProfileId = ref.read(userProfileProvider).id;
+          if (currentProfileId != uid) {
+            await ref.read(userProfileProvider.notifier).reset();
+          }
 
           await ref.read(ratingsProvider.notifier).clearLocal();
           await ref.read(vaultProvider.notifier).clear();
@@ -73,6 +100,12 @@ class TheRemoteApp extends ConsumerWidget {
           await ref.read(ratingsProvider.notifier).refreshFromRemote();
           await ref.read(vaultProvider.notifier).refreshFromRemote();
           await ref.read(followsProvider.notifier).refreshFromRemote();
+          // After identify + profile pull, ask RevenueCat for the fresh
+          // entitlement snapshot tied to THIS Supabase user. Covers:
+          //   - Returning users who purchased on another device.
+          //   - Users whose entitlement renewed/expired while signed out.
+          // Passive refresh — no store password prompt.
+          await ref.read(subscriptionProvider.notifier).refreshCustomerInfo();
         } else if (state.event == AuthChangeEvent.tokenRefreshed ||
             state.event == AuthChangeEvent.userUpdated) {
           ref.read(userProfileProvider.notifier).refreshFromRemote();

@@ -5,6 +5,175 @@ Formato: sección por fecha, bullets cortos.
 
 ---
 
+## 2026-04-14 — Fase 2a-1: 5 Gems personalizadas (VALIDADA en simulador)
+
+Cerrado el refactor del motor de recomendaciones en `lib/data/repositories/catalog_provider.dart` + ajuste en `lib/presentation/screens/home/home_screen.dart`.
+
+### Filosofía
+**NO somos un espejo de IMDb/RT.** Los scores de una sola fuente se pueden inflar con bots. El gate de calidad requiere consenso cross-source (≥2 fuentes clareando thresholds). La personalización (género / themes / sessionLength) es bonus aditivo encima de la calidad — nunca reemplaza el filtro. Entre dos títulos de calidad, el que matchea tu taste gana; entre uno de calidad y uno inflado, el de calidad siempre gana.
+
+### Cambios en `catalog_provider.dart`
+
+**Helpers nuevos (al final del archivo):**
+- `_qualitySourceCount(c)` — cuenta cuántas fuentes clarean los thresholds.
+- `_kImdbGate=7.2`, `_kRtGate=75`, `_kMetaGate=65`, `_kWatcherGate=70`.
+- `_passesQualityGate(c)` — true si ≥2 fuentes pasan.
+- `_compositeScore(c)` — promedio 0-100 de las fuentes disponibles (IMDb×10, RT, Meta, watcherScore).
+- `_profileBonus(c, p)` — aditivo: +15 por género overlap (cap +45), +10 por `favoriteThemes` match en director/cast (substring case-insensitive, cap +30), +10 si duración cae en la ventana de `sessionLength`.
+- `_matchesPlatforms(c, p)` — hard filter por `activePlatforms`. Si el perfil no tiene plataformas seleccionadas, pasa todo (defensivo); si el content no tiene availability conocida, se oculta.
+- `_reasonFor(c, p, hasCurated)` — string humano: "Curated pick..." > "Matches your taste in X" > "Rare consensus..." > "High ratings, low noise..."
+
+**`dailyGemsProvider` reescrito:**
+1. Lee `profile` via `ref.watch(userProfileProvider)`.
+2. Fetch de `creator_takes` con `!inner(creators)` filtrando `is_curated=true` → Set de `tmdbId` para boost 1.5× al composite score.
+3. `excluded = watchedIds ∪ dismissedIds` — no duplica lo que ya viste o descartaste.
+4. Pool 1: platform + quality gate. Si < 15 titles → tira el gate. Si < 5 → tira el platform filter. Si vacío → catálogo completo (último recurso).
+5. Score por candidato = `_compositeScore(c) * (1.5 si curated else 1.0) + _profileBonus(c, p)`.
+6. Ordena por score desc, toma top 30.
+7. **Daily rotation:** `shuffle(Random(hash(profile.id + yyyy-mm-dd)))` → mismo user ve las mismas 5 todo el día, nuevas 5 mañana.
+8. Toma 5, re-ordena por score desc, asigna `gemRank 5..1`. `tierVisibility` = Free para ranks 1-2 (los 2 de menor score como tease), Pro para ranks 3-5 (las 3 mejores detrás del paywall).
+
+**Platform filter aplicado a:** `trendingProvider`, `explodingProvider`, `quickDecisionProvider`, `popularInRegionProvider`, `bingeableProvider`. `dontWasteProvider` queda platform-agnóstico a propósito (la advertencia aplica donde sea).
+
+### Cambio en `home_screen.dart`
+
+Líneas ~49-52: el sort pasó de `watcherScore ASC` a `gemRank ASC`. Estructura visual idéntica — las 2 gems "peores" arriba visibles para Free, las 3 "mejores" al fondo con blur + paywall. Pro ve las 5 ordenadas 1→5.
+
+### Validación en simulador
+
+Vivi corrió `flutter run` post-refactor y confirmó los 3 vectores:
+1. Home **cambió** → daily rotation con seed por user+fecha está rodando.
+2. Las 5 Gems son **diferentes** a las del algoritmo anterior → el composite + bonus se aplica a su perfil real.
+3. **No aparecen títulos que ya marcó con ❤️ o rating alto** → el `excluded` está cortando bien.
+
+### Decisiones de scope
+
+- **Diferido a Fase 2a-2:** community signals (`not_for_me_count`, `loved_count` agregados). Requiere vista + RLS especial porque `user_vault` y `user_ratings` son owner-only. Decisión: esperar ~50+ users activos para calibrar thresholds con data real y no sobreponderar votos de 3 testers.
+- **Diferido a Fase 3:** "Change my preferences" en Settings — reactivar Fast/Long Quiz.
+- **Diferido a Fase 4:** Remoty consumiendo `userProfileProvider` (incluidos `favoriteThemes`) para conversación tipo "Vi que te gusta Keanu Reeves...".
+
+### Por qué ahora y no antes
+
+El bug reportado en Build 8 ("Quiz 2 ratings no actualizan 5 Gems") era síntoma de que `home_screen.dart` solo leía `tier/avatarKey/alias` y el engine trabajaba con data parcial. Fase 1 trajo los campos reales del quiz a Supabase (cross-device) — Fase 2a-1 por fin los usa para puntuar.
+
+---
+
+## 2026-04-14 — Fase 1: schema expansion + Fix A (CHECK) + Fix B (error surfacing) + VALIDADA
+
+Cerrado el sync completo del perfil. Antes de hoy, `pushProfile/pullProfile` solo movían `id, alias, country, avatar_key, tier, quiz_completion`. Los campos del quiz (`activePlatforms`, `favoriteGenres`, `sessionLength`, `favoriteThemes`, `watchedIds` del seen-canon grid) vivían solo en SharedPreferences → cross-device = pérdida total de preferencias.
+
+### Schema expansion
+Migración añadió columnas a `public.profiles`: `active_platforms text[]`, `favorite_genres text[]`, `session_length text` (con CHECK de enum), `favorite_themes text[]`, `watched_canon_ids text[]`. RLS preservada. `pushProfile/pullProfile` actualizados para leer/escribir los 5 campos nuevos.
+
+### Fix A — `user_vault.bucket` CHECK constraint
+El CHECK original permitía solo `watchlist | not_for_me`. Cuando Vivi marcaba ❤️ (bucket `loved`), el upsert fallaba con CHECK violation — **y el `catch (_) {}` silencioso en `supabase_sync.dart` lo ocultaba**. Los loved items nunca persistían a Supabase y desaparecían tras `flutter clean`. Migración: `CHECK (bucket IN ('loved','watchlist','not_for_me'))`.
+
+### Fix B — Eliminar catch silenciosos en sync
+Patrón cambiado en 6 métodos de `supabase_sync.dart` (`pushRating`, `deleteRating`, `pushVaultBucket`, `deleteVaultEntry`, `pushFollow`, `deleteFollow`):
+```dart
+// Antes: catch (_) {} — silencioso
+// Ahora: catch (e) { if (kDebugMode) debugPrint('[sync] ... failed: $e'); }
+```
+`pushProfile` mantiene `rethrow` en 23505 para que `setAlias` pueda mostrar el UX "alias ya tomado"; el resto queda best-effort pero **visible en consola**. Regla: nunca más silenciar un error de sync sin al menos log en debug.
+
+### Nuke #2
+Tras aplicar Fase 1 + Fix A + Fix B, `DELETE FROM auth.users;` vía Supabase MCP. DB quedó en 0 users / 0 profiles / 0 vault / 0 ratings / 0 follows. Content (6,713 titles) intacto. Necesario para validar el Fast Quiz + vault completo en fresh start.
+
+### Validación
+Vivi reportó "veo todo en mi bóveda!!!" — login fresh → Fast Quiz → Long Quiz → marca loved/watchlist/not_for_me/ratings → `flutter clean && flutter run` → login → los 3 buckets + ratings + perfil completo vuelven de Supabase. Cross-device confirmado.
+
+### Audit lateral de follows
+`user_follows` OK estructuralmente (PK compuesta, RLS owner-only, FK CASCADE a `creators.id`). Riesgo vivo: hoy hay 0 creators salvo `@izaivi` (recreado al final del día), así que cualquier follow previo moriría 23503. Con Fix B ahora sería visible en consola.
+
+### Creator @izaivi recreado
+- `creators.id = 3f248014-315a-470f-9b0e-3ca6cf5e8ef4`
+- `user_id = 0d9d455c-1d7f-4eaf-80eb-c1c1141ce6b4` (iCloud, `izanami.ivi@icloud.com`)
+- alias `izaivi`, specialty "Sci-fi, thrillers, cine de autor", `is_curated=true`
+- Pendiente: Vivi pegará 4 takes. Estos entran al composite con boost 1.5× (ver Fase 2a-1).
+
+### Nota de autocorrector
+Uno de los directores favoritos de Vivi en Long Quiz es **Denis Villeneuve** (no "Villanueva" — el autocorrector iOS lo convierte). Almacenado en `profiles.favorite_themes`.
+
+---
+
+## 2026-04-13 — RC_APPLE_KEY truncada por un carácter (paywall "Invalid API Key")
+
+Días persiguiendo al fantasma del paywall. Error real en TestFlight:
+```
+PlatformException(11, There was a credentials issue. Invalid API Key.)
+```
+
+### Causa
+`.build_ipa.sh` línea 18 tenía `RC_APPLE_KEY=appl_nizWIKpVHaGDcMQunpgdVfBaUf`. La key real en el RevenueCat dashboard (Project Settings → API Keys → Public app-specific) es `appl_nizWIKpVHaGDcMQunpgdVfBaUfu` — **con una `u` final que se perdió** en algún copy-paste histórico. Un solo carácter.
+
+El SDK de RevenueCat valida la key server-side. Si no matchea ninguna key registrada, regresa `CONFIGURATION_ERROR` (code 11) con el mensaje "Invalid API Key". No había falla de bundle ID, ni de productos, ni de offerings — literalmente el cliente mandaba una key que no existe en ninguna parte.
+
+### Fix
+Actualizada la key en `.build_ipa.sh`. El siguiente build que la compile tendrá paywall funcional (asumiendo todo lo demás del setup de RevenueCat está bien, que sí lo está según Build 8).
+
+### Lección aprendida (segunda vez en el mismo día)
+Hoy también nos pasó con SUPABASE_ANON_KEY — un placeholder `eyJhbGc...SMUadOWrw0xXsfZsxTTbzL_RCev7yAe067RrnPo6sd4` pegado literal. Cada vez que yo (Claude) abrevie una key en chat con `...`, verificar contra el archivo fuente antes de pegarla al build script. Reglita: las keys completas nunca se deberían leer/copiar a mano; siempre desde la fuente de verdad.
+
+---
+
+## 2026-04-13 — Build 12: Settings usa `currentUser` como source of truth (hotfix 2)
+
+Build 11 se subió con el fix de `completeFastQuiz`, pero Vivi reportó el MISMO síntoma: login parece funcionar, llega a Home, pero Settings sigue diciendo "log in". El fix de Build 11 era real pero insuficiente — había una causa raíz arquitectural más profunda que cubría múltiples escenarios, no solo Fast Quiz.
+
+### Causa raíz arquitectural
+- `profile_screen.dart` línea 44 hacía `isSignedIn = profile.id != null` — un proxy del estado local.
+- `app_router.dart` línea 62 hace `signedIn = user != null` con `user = ref.read(currentUserProvider)` — la fuente de verdad de Supabase Auth.
+- **Dos checks divergentes para la misma pregunta.** El router usa la fuente de verdad; Settings usaba un mirror local que puede quedar desincronizado por cualquiera de:
+  - `refreshFromRemote` aún en vuelo (race con UI render)
+  - `pullProfile` devuelve null silenciosamente (network / RLS / trigger tardío)
+  - Una factory que construye un `UserProfile` sin aceptar `id` (era el bug de `fromFastQuiz`, podrían existir más en el futuro)
+- Resultado: el router cree que sí estás logueada (y con razón, Supabase te tiene), pero Settings cree que no.
+
+### Fix
+- `profile_screen.dart`: cambiado a `final currentUser = ref.watch(currentUserProvider); final isSignedIn = currentUser != null;`. Ahora Settings y el router hacen la misma pregunta a la misma tabla.
+- Comentario CRITICAL inline para que nadie lo regrese a `profile.id` en el futuro.
+- El fix de `completeFastQuiz` (Build 11) se mantiene — sigue siendo correcto por higiene (el state local tampoco debe perder el id), pero ya no es el gate del UI.
+
+### Why no rollback
+- Build 11 fix era legítimo y necesario.
+- Build 8 tenía el MISMO bug latente (y peor: también faltaba el trigger `handle_new_user`). Rollback nos dejaría con un estado más roto.
+- Build 12 corrige el síntoma visible + mantiene las mejoras de integridad anteriores.
+
+### Test plan
+1. Borrar app, reinstalar desde TestFlight (Build 12).
+2. Continue with Apple → completa Fast Quiz → Home.
+3. Ir a Settings → debe aparecer tu alias/email, NO "log in".
+4. Sign out desde Settings → Settings debe volver a decir "log in".
+5. Continue as guest → Settings debe decir que estás como guest (no "log in").
+
+---
+
+## 2026-04-13 — Build 11: Hotfix `completeFastQuiz` perdía el `id` de Supabase
+
+Build 10 salió a TestFlight y reprodujo un bug que en Build 8 quedaba enmascarado por el flujo forzado: tras login (Apple/Google/Guest) → Fast Quiz → Home, Settings mostraba "log in" como si no hubiera sesión. Vivi vio en Supabase un nuevo profile con `alias=NULL` desde MX, confirmando que el auth SÍ creó la fila pero el cliente perdió el `id` localmente.
+
+### Causa raíz
+- `UserProfileController.completeFastQuiz` en `lib/data/repositories/user_profile_repository.dart` llamaba a `UserProfile.fromFastQuiz(...)`, una factory que construye un `UserProfile` fresco SIN aceptar `id`, `alias`, `tier` ni `avatarKey`.
+- El listener de `signedIn` en `main.dart` ya hacía `refreshFromRemote()` que pulleaba el `id` del Supabase auth → todo bien hasta que el usuario terminaba el Fast Quiz.
+- El Fast Quiz disparaba `completeFastQuiz` → `state = UserProfile.fromFastQuiz(...)` → `id = null` → Settings mira `profile.id != null` → "no logueado".
+- Como bonus, `pushProfile(next)` enviaba a Supabase un row con `id` regenerado por defaults → fila huérfana sin `auth.uid()` válido.
+
+### Fix
+- Cambiado `completeFastQuiz` para usar `state.copyWith(country, activePlatforms, favoriteGenres, quizCompletion)` en vez de `UserProfile.fromFastQuiz(...)`. Preserva todo lo que `refreshFromRemote` ya pobló (`id`, `alias`, `tier`, `avatarKey`).
+- Añadido guard: si `state.quizCompletion == long`, no degrades a `fast` (caso "re-correr fast quiz desde Settings" no debe regresar el progreso del long quiz).
+- Añadido `assert(activePlatforms.isNotEmpty)` para cazar bugs de UI que dejen pasar la pantalla sin selección.
+
+### Recovery extra (handle_new_user trigger)
+- Diagnóstico paralelo encontró que el trigger `on_auth_user_created` sobre `auth.users` estaba ausente (probablemente arrastrado por un cleanup manual de NULLs en la tabla `profiles`). Sin él, los signups de Apple/Google/Guest creaban `auth.users` rows pero NO `profiles` rows.
+- Nuevo migration `2026-04-13_restore_handle_new_user.sql`: recrea la función `handle_new_user()` con `SECURITY DEFINER`, recrea el trigger, y backfillea profiles para cualquier `auth.users` huérfano. Idempotente.
+- Tras el fix de cliente + recovery del trigger, decisión de Vivi: nuke total (`DELETE FROM auth.users`) → fresh start. Pre-launch los testers se vuelven a registrar gratis. Confirmado: `auth_users=0, profiles=0, creators=0, content=6713 (preservado)`.
+
+### Pendientes Build 11
+- Vivi recrea su perfil de creador y re-pega sus 4 takes guardados.
+- Siguen pendientes (de Build 10): Premium IAP en TestFlight real, Remoty + Anime intent, SharedPreferences user-scoped keys.
+
+---
+
 ## 2026-04-13 — Build 10: Fixes post-TestFlight Build 8
 
 Build 8 salió a TestFlight y Vivi cazó varios bugs de session management + cold start + long quiz. Build 10 ataca los más críticos.

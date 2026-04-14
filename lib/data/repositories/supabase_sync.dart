@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -53,6 +54,21 @@ class SupabaseSyncService {
           (e) => e.name == (row['quiz_completion'] as String?),
           orElse: () => QuizCompletion.none,
         ),
+        activePlatforms: _stringArray(row['active_platforms']),
+        favoriteGenres: _stringArray(row['favorite_genres']),
+        sessionLength: SessionLength.values.firstWhere(
+          (e) => e.name == (row['session_length'] as String?),
+          orElse: () => SessionLength.medium,
+        ),
+        favoriteThemes: _stringArray(row['favorite_themes']),
+        // watched_canon_ids is the Long Quiz bootstrap seed (seenCanonIds +
+        // lovedRecentIds). We merge it into the in-memory `watchedIds` set
+        // so the engine's awarenessScore path sees them as already-watched
+        // without a separate code branch. The user's running "I watched this"
+        // mutations still push via the (future) user_watched table — this
+        // column is immutable after the Long Quiz completes except when the
+        // user re-runs the Long Quiz.
+        watchedIds: _stringArray(row['watched_canon_ids']).toSet(),
       );
     } catch (_) {
       return null;
@@ -71,6 +87,14 @@ class SupabaseSyncService {
         'avatar_key': p.avatarKey,
         'tier': p.tier,
         'quiz_completion': p.quizCompletion.name,
+        'active_platforms': p.activePlatforms,
+        'favorite_genres': p.favoriteGenres,
+        'session_length': p.sessionLength.name,
+        'favorite_themes': p.favoriteThemes,
+        // Watched ids pushed here are the Long Quiz seed only. Runtime
+        // "I marked this as watched" writes go through the ratings /
+        // watched path — don't overwrite the seed from normal behavior.
+        'watched_canon_ids': p.watchedIds.toList(),
       });
     } on PostgrestException catch (e) {
       // Surface unique_violation so callers (setAlias) can show a friendly
@@ -79,6 +103,15 @@ class SupabaseSyncService {
     } catch (_) {
       // best-effort: never crash UI on a sync failure
     }
+  }
+
+  /// Postgrest returns `text[]` columns as `List<dynamic>`. Normalize to a
+  /// `List<String>`, tolerating nulls and non-string entries (defensively —
+  /// the check constraint on session_length is the only enum we enforce
+  /// at the DB; string arrays are free-form so we trust the client writer).
+  List<String> _stringArray(dynamic value) {
+    if (value is! List) return const [];
+    return value.whereType<String>().toList();
   }
 
   /// Returns `true` if [alias] is not yet taken by another user.
@@ -143,7 +176,11 @@ class SupabaseSyncService {
         'content_id': contentId,
         'stars': stars,
       });
-    } catch (_) {}
+    } catch (e) {
+      // Best-effort sync. Log in debug so a silent schema/RLS regression
+      // doesn't hide itself like the user_vault CHECK bug did (2026-04-14).
+      if (kDebugMode) debugPrint('[sync] pushRating failed: $e');
+    }
   }
 
   Future<void> deleteRating(String contentId) async {
@@ -156,7 +193,9 @@ class SupabaseSyncService {
           .delete()
           .eq('user_id', uid)
           .eq('content_id', contentId);
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('[sync] deleteRating failed: $e');
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -205,7 +244,15 @@ class SupabaseSyncService {
         'content_id': contentId,
         'bucket': bucket,
       });
-    } catch (_) {}
+    } catch (e) {
+      // 2026-04-14: this catch previously swallowed a CHECK violation for
+      // bucket='loved' that wasn't in the original constraint. Loved items
+      // were silently never persisted to Supabase, so they disappeared after
+      // flutter clean. Never silence this again — log in debug at minimum.
+      if (kDebugMode) {
+        debugPrint('[sync] pushVaultBucket($contentId, $bucket) failed: $e');
+      }
+    }
   }
 
   Future<void> deleteVaultEntry(String contentId) async {
@@ -218,7 +265,9 @@ class SupabaseSyncService {
           .delete()
           .eq('user_id', uid)
           .eq('content_id', contentId);
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('[sync] deleteVaultEntry failed: $e');
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -247,7 +296,9 @@ class SupabaseSyncService {
         'user_id': uid,
         'creator_id': creatorId,
       });
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('[sync] pushFollow failed: $e');
+    }
   }
 
   Future<void> deleteFollow(String creatorId) async {
@@ -260,7 +311,9 @@ class SupabaseSyncService {
           .delete()
           .eq('user_id', uid)
           .eq('creator_id', creatorId);
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('[sync] deleteFollow failed: $e');
+    }
   }
 }
 

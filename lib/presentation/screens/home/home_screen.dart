@@ -44,10 +44,12 @@ class HomeScreen extends ConsumerWidget {
     final quickDecision = quickDecisionAsync.valueOrNull ?? [];
     final dontWaste = dontWasteAsync.valueOrNull ?? [];
 
-    // 5 Gems tease: si el user es free, las 2 gemas con menor Watcher Score
-    // se ven claras y las 3 mejores quedan bloqueadas con blur + overlay.
+    // 5 Gems tease: si el user es free, las 2 gemas con menor gemRank se ven
+    // claras y las 3 mejores quedan bloqueadas con blur + overlay. Ordenamos
+    // por gemRank ASC (gem #1 primero, #5 al final), así el tease aparece
+    // arriba y las mejores joyas quedan ocultas tras el paywall.
     final allGems = [...(dailyGemsAsync.valueOrNull ?? [])]
-      ..sort((a, b) => a.content.watcherScore.compareTo(b.content.watcherScore));
+      ..sort((a, b) => a.gemRank.compareTo(b.gemRank));
     final visibleGems = isPro ? allGems : allGems.take(2).toList();
     final lockedGems = isPro ? const <Gem>[] : allGems.skip(2).toList();
 

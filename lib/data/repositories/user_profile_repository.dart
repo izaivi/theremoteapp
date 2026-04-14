@@ -109,9 +109,23 @@ class UserProfileController extends StateNotifier<UserProfile> {
   }
 
   /// After sign-in: pull remote profile and merge. Remote wins on conflict
-  /// for fields it has, local wins for fields the remote schema doesn't
-  /// store yet (favorite genres, themes, watched IDs — those live in
-  /// future tables).
+  /// for fields it owns (id, alias, country, avatar, tier, quizCompletion).
+  /// Local wins for fields the remote schema doesn't store yet (favorite
+  /// genres, themes, watched IDs — those live in future tables).
+  ///
+  /// **quizCompletion is canonical on the remote** (Build 15 fix for the
+  /// "Rayo McQueen" bug reported in Build 14 TestFlight): if the user
+  /// signs in with a brand-new account, remote.quizCompletion is `none`
+  /// and we MUST surface that to the router so it redirects to /onboarding.
+  /// The old merge kept the local value when remote was `none`, which
+  /// meant a prior-user's `fast`/`long` leaked through SharedPreferences
+  /// into the new session and skipped the quiz (plus broke Home's 5 Gems
+  /// because the new user never seeded their genres/platforms).
+  ///
+  /// The user-switch reset in main.dart ensures local state is
+  /// [UserProfile.anonymous] before we land here when the session's
+  /// user id has changed, so the "remote canonical" rule can't wipe a
+  /// legitimate mid-flight local edit in practice.
   Future<void> refreshFromRemote() async {
     if (!_sync.isSignedIn) return;
     final remote = await _sync.pullProfile();
@@ -128,15 +142,25 @@ class UserProfileController extends StateNotifier<UserProfile> {
     // Merge: remote wins on fields it owns. For alias specifically, if the
     // remote doesn't have one but local does, we attempt a backfill push so
     // users who set an alias pre-auth (or pre-sync-wire) don't lose it.
+    //
+    // Arrays (activePlatforms, favoriteGenres, favoriteThemes) and the
+    // session length are now canonical on remote after the Build 15 schema
+    // expansion — a cross-device user MUST receive their full quiz state
+    // from Supabase, not the local default. For watchedIds we UNION local
+    // with remote so runtime "mark as watched" actions that haven't synced
+    // yet don't get wiped by a pull.
     final merged = state.copyWith(
       id: remote.id ?? state.id,
       alias: remote.alias ?? state.alias,
       country: remote.country ?? state.country,
       avatarKey: remote.avatarKey ?? state.avatarKey,
       tier: remote.tier,
-      quizCompletion: remote.quizCompletion != QuizCompletion.none
-          ? remote.quizCompletion
-          : state.quizCompletion,
+      quizCompletion: remote.quizCompletion,
+      activePlatforms: remote.activePlatforms,
+      favoriteGenres: remote.favoriteGenres,
+      sessionLength: remote.sessionLength,
+      favoriteThemes: remote.favoriteThemes,
+      watchedIds: {...state.watchedIds, ...remote.watchedIds},
     );
     state = merged;
     await _repo.save(merged);
@@ -158,10 +182,22 @@ class UserProfileController extends StateNotifier<UserProfile> {
     required List<String> activePlatforms,
     required List<String> favoriteGenres,
   }) async {
-    final next = UserProfile.fromFastQuiz(
+    assert(activePlatforms.isNotEmpty,
+        'Fast Quiz requires at least one active platform.');
+    // CRITICAL: preserve the existing state (especially `id`, `alias`,
+    // `tier`, `avatarKey`) when applying Fast Quiz answers. Using
+    // `UserProfile.fromFastQuiz` here would build a fresh profile from
+    // scratch and wipe the Supabase auth id pulled by `refreshFromRemote`,
+    // making the app look "logged out" everywhere that reads `profile.id`
+    // (including Settings.isSignedIn). Re-running fast quiz from settings
+    // shouldn't regress quiz completion either, so we only upgrade.
+    final next = state.copyWith(
       country: country,
       activePlatforms: activePlatforms,
       favoriteGenres: favoriteGenres,
+      quizCompletion: state.quizCompletion == QuizCompletion.long
+          ? QuizCompletion.long
+          : QuizCompletion.fast,
     );
     state = next;
     await _repo.save(next);
@@ -214,6 +250,24 @@ class UserProfileController extends StateNotifier<UserProfile> {
 
   Future<void> setAvatar(String? avatarKey) async {
     final next = state.copyWith(avatarKey: avatarKey);
+    state = next;
+    await _repo.save(next);
+    _sync.pushProfile(next);
+  }
+
+  /// Update the subscription tier (`'free'` or `'pro'`).
+  ///
+  /// Called by [SubscriptionController] whenever the RevenueCat
+  /// `CustomerInfo` stream reports a change in the "Flixscope Pro"
+  /// entitlement. This is the single path that keeps the Supabase
+  /// mirror (`profiles.tier`) in sync with the actual billing state.
+  ///
+  /// Idempotent — calling with the same tier is a cheap no-op, which
+  /// matters because RevenueCat may emit the initial snapshot AND a
+  /// subsequent identical update on the same boot.
+  Future<void> setTier(String tier) async {
+    if (state.tier == tier) return;
+    final next = state.copyWith(tier: tier);
     state = next;
     await _repo.save(next);
     _sync.pushProfile(next);

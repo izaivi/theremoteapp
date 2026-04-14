@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 
 import '../../core/revenuecat/revenuecat_client.dart';
+import 'user_profile_repository.dart';
 
 /// Subscription state — tracks whether the user has the Premium entitlement.
 ///
@@ -41,9 +42,11 @@ class SubscriptionState {
 }
 
 class SubscriptionController extends StateNotifier<SubscriptionState> {
-  SubscriptionController() : super(const SubscriptionState()) {
+  SubscriptionController(this._ref) : super(const SubscriptionState()) {
     _init();
   }
+
+  final Ref _ref;
 
   // -----------------------------------------------------------------------
   // Init — listen to CustomerInfo changes from RevenueCat.
@@ -62,18 +65,43 @@ class SubscriptionController extends StateNotifier<SubscriptionState> {
   }
 
   void _onCustomerInfoUpdated(CustomerInfo info) {
-    state = state.copyWith(
-      isPremium: _hasPremium(info),
-    );
+    final premium = _hasPremium(info);
+    if (premium == state.isPremium) return;
+    state = state.copyWith(isPremium: premium);
+    _syncTierToProfile(premium);
   }
 
-  Future<void> _refreshCustomerInfo() async {
+  Future<void> _refreshCustomerInfo() async => refreshCustomerInfo();
+
+  /// Passive refresh of the RevenueCat entitlement snapshot.
+  ///
+  /// Safe to call after sign-in to pick up entitlements the freshly-
+  /// identified user already owns (e.g. purchased on another device).
+  /// Unlike `restorePurchases`, this never prompts for a store password —
+  /// it just asks the SDK for the latest cached CustomerInfo.
+  Future<void> refreshCustomerInfo() async {
+    if (!RevenueCatConfig.isConfigured) return;
     try {
       final info = await Purchases.getCustomerInfo();
-      state = state.copyWith(isPremium: _hasPremium(info));
+      final premium = _hasPremium(info);
+      if (premium == state.isPremium) return;
+      state = state.copyWith(isPremium: premium);
+      _syncTierToProfile(premium);
     } catch (_) {
       // Network error or SDK not ready — keep previous state.
     }
+  }
+
+  /// Mirror the RevenueCat entitlement state to the user profile so every
+  /// gate in the UI (`isProProvider`, `profile.tier == 'pro'`, etc.) sees
+  /// the change. This is the bridge that used to be missing: before this
+  /// sync, a successful purchase would flash "Welcome" but every padlock
+  /// stayed locked because the Supabase mirror never learned about it.
+  void _syncTierToProfile(bool premium) {
+    final tier = premium ? 'pro' : 'free';
+    // `setTier` is idempotent AND fire-and-forgets the Supabase push, so
+    // a slow network won't block the RevenueCat listener.
+    _ref.read(userProfileProvider.notifier).setTier(tier);
   }
 
   static bool _hasPremium(CustomerInfo info) {
@@ -113,7 +141,9 @@ class SubscriptionController extends StateNotifier<SubscriptionState> {
     try {
       final result = await Purchases.purchasePackage(package);
       final premium = _hasPremium(result);
+      final changed = premium != state.isPremium;
       state = state.copyWith(isPremium: premium, isLoading: false);
+      if (changed) _syncTierToProfile(premium);
       return premium;
     } on PurchasesErrorCode catch (_) {
       // User cancelled or billing error — stay on the paywall.
@@ -137,7 +167,9 @@ class SubscriptionController extends StateNotifier<SubscriptionState> {
     try {
       final info = await Purchases.restorePurchases();
       final premium = _hasPremium(info);
+      final changed = premium != state.isPremium;
       state = state.copyWith(isPremium: premium, isLoading: false);
+      if (changed) _syncTierToProfile(premium);
       return premium;
     } catch (_) {
       state = state.copyWith(isLoading: false);
@@ -161,7 +193,7 @@ class SubscriptionController extends StateNotifier<SubscriptionState> {
 
 final subscriptionProvider =
     StateNotifierProvider<SubscriptionController, SubscriptionState>(
-  (ref) => SubscriptionController(),
+  (ref) => SubscriptionController(ref),
 );
 
 /// Convenience — most call sites just need a bool.
