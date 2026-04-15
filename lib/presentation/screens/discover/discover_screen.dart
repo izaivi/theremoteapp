@@ -50,6 +50,19 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
 
   bool get _hasActiveFilters =>
       _query.isNotEmpty ||
+      _hasActiveFilterChips;
+
+  /// Tighter version of [_hasActiveFilters]: true only when the user has
+  /// applied structural filters (genre/platform/type/duration/minScore), not
+  /// when they merely typed in the search bar.
+  ///
+  /// Used to drive the "active" dot on the filter icon. Build 16 UX fix —
+  /// previously the dot lit up just because the query was non-empty, which
+  /// made users think they had invisible filters stuck on (Vivi's report:
+  /// "aparece la pelotita... se activa sola con un filtro secreto"). The
+  /// dot should reflect "I applied filters I can't see from here", not
+  /// "I'm searching".
+  bool get _hasActiveFilterChips =>
       _genres.isNotEmpty ||
       _platforms.isNotEmpty ||
       _type != null ||
@@ -179,7 +192,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
                 ),
                 const SizedBox(width: 8),
                 _FilterIconButton(
-                  active: _hasActiveFilters,
+                  active: _hasActiveFilterChips,
                   onTap: _openFilters,
                 ),
               ],
@@ -223,9 +236,21 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
           // --- Content area ---
           Expanded(
             child: ref.watch(catalogProvider).when(
-              data: (catalog) => _hasActiveFilters
-                  ? _ResultsGrid(items: _applyFilters(catalog))
-                  : _IdleSections(l10n: l10n, catalog: catalog),
+              data: (catalog) {
+                if (_hasActiveFilters) {
+                  // Active search/filter: show everything that matches —
+                  // including titles the user has already engaged with.
+                  // Searching for "FROM" should return FROM even if rated.
+                  return _ResultsGrid(items: _applyFilters(catalog));
+                }
+                // Idle: hide engaged titles so this surface stays a
+                // "what's next" view, not a recap of what they've already
+                // marked.
+                final excluded = ref.watch(engagedExclusionProvider);
+                final visibleCatalog =
+                    catalog.where((c) => !excluded.contains(c.id)).toList();
+                return _IdleSections(l10n: l10n, catalog: visibleCatalog);
+              },
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(child: Text('Error: $e')),
             ),

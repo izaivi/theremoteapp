@@ -261,6 +261,31 @@ class AuthRepository {
   }
 
   // -----------------------------------------------------------------------
+  // Delete account — Build 16 / Apple Guideline 5.1.1(v)
+  // -----------------------------------------------------------------------
+
+  /// Permanently deletes the current user's auth row + all cascaded data
+  /// via the `public.delete_my_account` RPC (SECURITY DEFINER). On
+  /// success the caller should immediately sign out locally to drop any
+  /// cached session. Returns true on success, false if not configured or
+  /// not signed in; throws on any other server error so the UI can show
+  /// a real message instead of a silent "coming soon".
+  ///
+  /// Sign in with Apple refresh-token revocation is a follow-up task —
+  /// requires an edge function with Apple service credentials. Tracked
+  /// for Build 17.
+  Future<bool> deleteAccount() async {
+    if (!SupabaseConfig.isConfigured) return false;
+    if (_auth.currentUser == null) return false;
+    await Supabase.instance.client.rpc('delete_my_account');
+    // Session is still cached client-side even though the auth.users row
+    // is gone — explicitly sign out so restart doesn't try to refresh a
+    // token for a non-existent user.
+    await _auth.signOut();
+    return true;
+  }
+
+  // -----------------------------------------------------------------------
   // Helpers
   // -----------------------------------------------------------------------
 

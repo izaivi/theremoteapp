@@ -279,6 +279,7 @@
   "genreHorror": "Horror",
   "genreDocumentary": "Documentary",
   "genreAnimation": "Animation",
+  "genreAnime": "Anime",
   "genreCrime": "Crime",
   "genreHistory": "History",
   "genreMystery": "Mystery",
@@ -320,5 +321,62 @@
   "contentLoginGateCta": "Sign in later",
   "contentNoTakes": "No quick takes yet. Be the first verified watcher.",
   "contentMyRating": "Your rating",
-  "contentNotForMe": "Not for me"
+  "contentNotForMe": "Not for me",
+
+  "legalTermsTitle": "Terms of Service",
+  "legalGuidelinesTitle": "Community Guidelines",
+  "legalLoadError": "Couldn't load this document.",
+  "legalOpenOnWeb": "Open on web",
+
+  "profileCommunityGuidelines": "Community Guidelines",
+  "profileBlockedCreators": "Blocked creators",
+
+  "authLegalBlurb": "By continuing, you agree to our {terms} and {guidelines}.",
+  "@authLegalBlurb": {
+    "placeholders": {
+      "terms": { "type": "String" },
+      "guidelines": { "type": "String" }
+    }
+  },
+  "authTermsLink": "Terms of Service",
+  "authGuidelinesLink": "Community Guidelines",
+
+  "reportAction": "Report",
+  "reportSheetTitle": "What's wrong with this?",
+  "reportSheetSubtitle": "We'll review within 24 hours.",
+  "reportReasonSpam": "Spam",
+  "reportReasonHarassment": "Harassment or bullying",
+  "reportReasonHate": "Hate speech",
+  "reportReasonOther": "Other",
+  "reportNoteLabel": "Tell us more (optional)",
+  "reportNoteRequiredLabel": "Describe what's wrong",
+  "reportNoteRequiredError": "Please describe the issue",
+  "reportSubmit": "Submit report",
+  "reportSuccess": "Report submitted. Our team will review it.",
+  "reportDuplicate": "You've already reported this.",
+  "reportError": "Couldn't submit report. Please try again.",
+
+  "blockAction": "Block",
+  "blockedState": "Blocked",
+  "unblockAction": "Unblock",
+  "blockConfirmTitle": "Block {alias}?",
+  "@blockConfirmTitle": {
+    "placeholders": { "alias": { "type": "String" } }
+  },
+  "blockConfirmBody": "You won't see their takes or profile. They won't be notified.",
+  "blockConfirmCta": "Block",
+  "blockedCreatorsTitle": "Blocked creators",
+  "blockedCreatorsEmpty": "You haven't blocked anyone.",
+  "blockedCreatorsHelp": "Unblock to start seeing their content again.",
+
+  "guidelinesSheetTitle": "Community Guidelines",
+  "guidelinesSheetSubtitle": "Before posting, please agree to keep Flixscope a good place for everyone.",
+  "guidelinesRuleHarassment": "No harassment, threats, or hate speech.",
+  "guidelinesRuleObjectionable": "No sexual, violent, or otherwise objectionable content.",
+  "guidelinesRuleSpam": "No spam, scams, or links to malicious sites.",
+  "guidelinesRuleImpersonation": "No impersonation of other people, creators, or brands.",
+  "guidelinesRuleIp": "Respect intellectual property — quote studios, don't steal.",
+  "guidelinesReadFull": "Read the full Community Guidelines →",
+  "guidelinesCancel": "Cancel",
+  "guidelinesAccept": "I Accept"
 }

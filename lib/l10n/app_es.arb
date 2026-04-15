@@ -258,6 +258,7 @@
   "genreHorror": "Terror",
   "genreDocumentary": "Documental",
   "genreAnimation": "Animación",
+  "genreAnime": "Anime",
   "genreCrime": "Crimen",
   "genreHistory": "Historia",
   "genreMystery": "Misterio",
@@ -287,5 +288,62 @@
   "contentLoginGateCta": "Más tarde",
   "contentNoTakes": "Aún no hay comentarios. Sé el primer usuario verificado.",
   "contentMyRating": "Tu calificación",
-  "contentNotForMe": "No es para mí"
+  "contentNotForMe": "No es para mí",
+
+  "legalTermsTitle": "Términos de Servicio",
+  "legalGuidelinesTitle": "Guías de la Comunidad",
+  "legalLoadError": "No pudimos cargar este documento.",
+  "legalOpenOnWeb": "Abrir en la web",
+
+  "profileCommunityGuidelines": "Guías de la Comunidad",
+  "profileBlockedCreators": "Creadores bloqueados",
+
+  "authLegalBlurb": "Al continuar, aceptas nuestros {terms} y nuestras {guidelines}.",
+  "@authLegalBlurb": {
+    "placeholders": {
+      "terms": { "type": "String" },
+      "guidelines": { "type": "String" }
+    }
+  },
+  "authTermsLink": "Términos de Servicio",
+  "authGuidelinesLink": "Guías de la Comunidad",
+
+  "reportAction": "Denunciar",
+  "reportSheetTitle": "¿Qué pasa con esto?",
+  "reportSheetSubtitle": "Lo revisaremos en 24 horas.",
+  "reportReasonSpam": "Spam",
+  "reportReasonHarassment": "Acoso o bullying",
+  "reportReasonHate": "Discurso de odio",
+  "reportReasonOther": "Otro",
+  "reportNoteLabel": "Cuéntanos más (opcional)",
+  "reportNoteRequiredLabel": "Describe qué está mal",
+  "reportNoteRequiredError": "Por favor describe el problema",
+  "reportSubmit": "Enviar denuncia",
+  "reportSuccess": "Denuncia enviada. Nuestro equipo la revisará.",
+  "reportDuplicate": "Ya denunciaste esto.",
+  "reportError": "No se pudo enviar. Intenta de nuevo.",
+
+  "blockAction": "Bloquear",
+  "blockedState": "Bloqueado",
+  "unblockAction": "Desbloquear",
+  "blockConfirmTitle": "¿Bloquear a {alias}?",
+  "@blockConfirmTitle": {
+    "placeholders": { "alias": { "type": "String" } }
+  },
+  "blockConfirmBody": "No verás sus takes ni su perfil. No serán notificados.",
+  "blockConfirmCta": "Bloquear",
+  "blockedCreatorsTitle": "Creadores bloqueados",
+  "blockedCreatorsEmpty": "No has bloqueado a nadie.",
+  "blockedCreatorsHelp": "Desbloquea para volver a ver su contenido.",
+
+  "guidelinesSheetTitle": "Normas de la Comunidad",
+  "guidelinesSheetSubtitle": "Antes de publicar, acepta ayudarnos a que Flixscope siga siendo un buen lugar para todos.",
+  "guidelinesRuleHarassment": "Sin acoso, amenazas ni discurso de odio.",
+  "guidelinesRuleObjectionable": "Sin contenido sexual, violento u ofensivo.",
+  "guidelinesRuleSpam": "Sin spam, estafas ni enlaces maliciosos.",
+  "guidelinesRuleImpersonation": "Sin suplantar a personas, creadores o marcas.",
+  "guidelinesRuleIp": "Respeta la propiedad intelectual — cita a los estudios, no los copies.",
+  "guidelinesReadFull": "Leer las Normas completas →",
+  "guidelinesCancel": "Cancelar",
+  "guidelinesAccept": "Aceptar"
 }

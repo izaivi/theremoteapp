@@ -1,19 +1,31 @@
 """
-The Remote — Fase 1 content ingest
+Flixscope — content ingest (TMDB-only)
 
 Pipeline:
-  1. TMDB (backbone)        → catálogo + metadata + watch providers por país
-  2. OMDb (enrichment)      → IMDb / Rotten Tomatoes / Metacritic scores
-  3. RapidAPI (fallback)    → availability para ES (streaming-availability)
-  4. Supabase upsert        → content + content_availability (service_role)
+  1. TMDB (backbone) → catálogo + metadata + watch providers por país
+  2. Supabase upsert → content + content_availability (service_role)
 
-Note: Watchmode was removed — the app constructs platform search URLs
-      at runtime (e.g. netflix.com/search?q=TITLE) instead of using deep links.
+Por qué TMDB-only:
+  - Watchmode fue retirado en Build 11 — la app construye search URLs por
+    plataforma en runtime (netflix.com/search?q=TITLE) en lugar de deep links.
+  - RapidAPI (streaming-availability) fue retirado en Fase 4.2 — TMDB
+    cubre los mismos países (US/MX/ES/SE) con suficiente fidelidad y nos
+    quita una dependencia + un costo.
+  - OMDb (IMDb / Rotten Tomatoes / Metacritic) corre APARTE en
+    `omdb_backfill.py` por batches (~1000/día), porque la rate limit de
+    OMDb gratis es lenta y no queremos bloquear el ingest.
+
+Sobre upsert: `ContentRow.to_dict()` filtra los `None` antes de mandar el
+payload, así que re-correr este script NO sobrescribe scores OMDb que ya
+estén poblados (vienen como `None` en `ContentRow` y quedan fuera del
+payload). El UPSERT solo toca columnas que el script realmente puebla.
 
 Uso:
-    python ingest.py                # full run (todas las plataformas/países)
-    python ingest.py --limit 10     # dry-ish run con pocos títulos por provider
-    python ingest.py --platforms netflix,max
+    python ingest.py                              # full run (PLATFORMS × COUNTRIES)
+    python ingest.py --limit 10                   # smoke test
+    python ingest.py --platforms netflix,max      # subset
+    python ingest.py --genre-sweep                # broad catalog (genre × decade)
+    python ingest.py --tmdb-ids 78,348            # inject specific IDs
 """
 
 from __future__ import annotations
@@ -38,17 +50,12 @@ from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
 load_dotenv()
 
 TMDB_TOKEN = os.environ["TMDB_TOKEN"]
-OMDB_API_KEY = os.environ["OMDB_API_KEY"]
-RAPIDAPI_KEY = os.environ["RAPIDAPI_KEY"]
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 
 COUNTRIES = [c.strip() for c in os.environ.get("INGEST_COUNTRIES", "US,MX,ES,SE").split(",")]
 LANGS = [l.strip() for l in os.environ.get("INGEST_LANGS", "en,es,sv").split(",")]
 PAGES_PER_PROVIDER = int(os.environ.get("INGEST_PAGES_PER_PROVIDER", "3"))
-
-# Países que caen a RapidAPI como fallback.
-RAPIDAPI_COUNTRIES = {"ES"}
 
 # Plataformas soportadas en Fase 1 (id en DB ↔ tmdb_provider_id).
 PLATFORMS = [
@@ -123,6 +130,9 @@ class ContentRow:
     media_type: str
     title: str
     original_title: str | None = None
+    # ISO 639-1 from TMDB (`ja`, `en`, `ko`, …). Used to filter anime
+    # (`ja` + Animation) and other language-specific clusters.
+    original_language: str | None = None
     release_year: int | None = None
     runtime_minutes: int | None = None
     genres: list[int] = field(default_factory=list)
@@ -135,6 +145,9 @@ class ContentRow:
     imdb_id: str | None = None
     director: str | None = None
     cast_list: list[str] = field(default_factory=list)
+    # OMDb-sourced scores. Populated by the separate `omdb_backfill.py`
+    # script — this ingest leaves them as None, and `to_dict()` filters
+    # None out so the UPSERT never overwrites existing OMDb data.
     imdb_score: float | None = None
     rt_score: int | None = None
     metacritic_score: int | None = None
@@ -267,6 +280,7 @@ def build_content_from_tmdb(tmdb_id: int, media_type: str) -> ContentRow | None:
         media_type=media_type,
         title=title,
         original_title=original_title,
+        original_language=det_en.get("original_language"),
         release_year=release_year,
         runtime_minutes=runtime,
         genres=genres,
@@ -332,109 +346,13 @@ def tmdb_availability_rows(tmdb_id: int, media_type: str) -> list[AvailabilityRo
 
 
 # ---------------------------------------------------------------------
-# OMDb — scores
+# OMDb / RapidAPI
 # ---------------------------------------------------------------------
-
-def omdb_enrich(row: ContentRow) -> None:
-    if not row.imdb_id:
-        return
-    try:
-        data = http_get(
-            "https://www.omdbapi.com/",
-            params={"i": row.imdb_id, "apikey": OMDB_API_KEY},
-        )
-    except requests.HTTPError as e:
-        log.warning("OMDb failed for %s: %s", row.imdb_id, e)
-        return
-
-    if data.get("Response") != "True":
-        return
-
-    try:
-        imdb = data.get("imdbRating")
-        if imdb and imdb != "N/A":
-            row.imdb_score = float(imdb)
-    except ValueError:
-        pass
-
-    for r in data.get("Ratings", []) or []:
-        src = r.get("Source", "")
-        val = r.get("Value", "")
-        if src == "Rotten Tomatoes" and val.endswith("%"):
-            try:
-                row.rt_score = int(val.rstrip("%"))
-            except ValueError:
-                pass
-        elif src == "Metacritic" and "/" in val:
-            try:
-                row.metacritic_score = int(val.split("/")[0])
-            except ValueError:
-                pass
-
-    if "omdb" not in row.data_sources:
-        row.data_sources.append("omdb")
-
-
-
-# ---------------------------------------------------------------------
-# RapidAPI — streaming-availability para ES (fallback)
-# ---------------------------------------------------------------------
-
-def rapidapi_enrich_es(imdb_id: str | None, tmdb_id: int) -> list[AvailabilityRow]:
-    if not imdb_id:
-        return []
-    try:
-        data = http_get(
-            "https://streaming-availability.p.rapidapi.com/shows/search/filters",
-            headers={
-                "x-rapidapi-key": RAPIDAPI_KEY,
-                "x-rapidapi-host": "streaming-availability.p.rapidapi.com",
-            },
-            params={"country": "es", "imdb_id": imdb_id},
-        )
-    except requests.HTTPError as e:
-        log.warning("RapidAPI ES failed for %s: %s", imdb_id, e)
-        return []
-
-    # El endpoint tiene un shape complejo; hacemos best-effort parseo de streamingOptions.es.
-    shows = data.get("shows") or []
-    if not shows:
-        return []
-    show = shows[0]
-    opts = (show.get("streamingOptions") or {}).get("es") or []
-
-    slug_to_db_id = {p[1]: p[0] for p in PLATFORMS}
-    service_alias = {
-        "netflix": "netflix", "max": "max", "hbo": "max",
-        "disney": "disney", "disneyplus": "disney",
-        "prime": "prime", "amazonprime": "prime",
-        "apple": "appletv", "appletv": "appletv", "appletvplus": "appletv",
-        "mubi": "mubi",
-    }
-
-    rows: list[AvailabilityRow] = []
-    for o in opts:
-        svc = ((o.get("service") or {}).get("id") or "").lower()
-        slug = service_alias.get(svc)
-        db_id = slug_to_db_id.get(slug) if slug else None
-        if db_id is None:
-            continue
-        monetization = (o.get("type") or "subscription").lower()
-        if monetization == "subscription":
-            monetization = "flatrate"
-        if monetization not in ("flatrate", "free", "ads", "rent", "buy"):
-            continue
-        price = (o.get("price") or {})
-        rows.append(AvailabilityRow(
-            content_id=tmdb_id,
-            country_code="ES",
-            platform_id=db_id,
-            monetization_type=monetization,
-            price_amount=price.get("amount"),
-            price_currency=price.get("currency"),
-            source="rapidapi",
-        ))
-    return rows
+# OMDb enrichment lives in `omdb_backfill.py` (separate batched job, ~1000/day
+# due to free-tier rate limits). RapidAPI streaming-availability was retired
+# in Fase 4.2 — TMDB watch providers covers US/MX/ES/SE adequately and avoids
+# the extra cost + dependency. The columns are still in `ContentRow` so OMDb
+# backfill can update them; they just stay None during regular ingest.
 
 
 # ---------------------------------------------------------------------
@@ -474,7 +392,13 @@ def upsert_availability(sb: Client, rows: list[AvailabilityRow]) -> None:
 # Main
 # ---------------------------------------------------------------------
 
-def run(limit: int | None, platforms_filter: set[str] | None, skip_rapidapi: bool = False, skip_omdb: bool = False, tmdb_ids: list[tuple[int, str]] | None = None, genre_sweep: bool = False, genre_sweep_pages: int = 5) -> None:
+def run(
+    limit: int | None,
+    platforms_filter: set[str] | None,
+    tmdb_ids: list[tuple[int, str]] | None = None,
+    genre_sweep: bool = False,
+    genre_sweep_pages: int = 5,
+) -> None:
     sb = supabase_client()
 
     discovered: set[tuple[int, str]] = set()  # (tmdb_id, media_type)
@@ -570,23 +494,12 @@ def run(limit: int | None, platforms_filter: set[str] | None, skip_rapidapi: boo
         if row is None:
             continue
 
-        if not skip_omdb:
-            try:
-                omdb_enrich(row)
-            except Exception as e:
-                log.warning("OMDb failed for %d: %s", tmdb_id, e)
         content_rows.append(row)
 
         try:
             avail_rows.extend(tmdb_availability_rows(tmdb_id, media_type))
         except (RetryError, Exception) as e:
             log.warning("TMDB providers failed for %d: %s", tmdb_id, e)
-
-        if not skip_rapidapi and "ES" in COUNTRIES:
-            try:
-                avail_rows.extend(rapidapi_enrich_es(row.imdb_id, tmdb_id))
-            except Exception as e:
-                log.warning("RapidAPI failed for %d: %s", tmdb_id, e)
 
         if idx % 200 == 0:
             log.info("Enrichment progress: %d/%d (errors: %d)", idx, total, errors)
@@ -627,14 +540,14 @@ def _parse_tmdb_ids(raw: str) -> list[tuple[int, str]]:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser()
+    p = argparse.ArgumentParser(
+        description="TMDB-only content ingest. OMDb scores are populated separately by omdb_backfill.py.",
+    )
     p.add_argument("--limit", type=int, default=None, help="Máximo de títulos a procesar (testing)")
     p.add_argument("--platforms", type=str, default=None, help="Comma-separated slugs (netflix,max,...)")
-    p.add_argument("--skip-rapidapi", action="store_true", help="Skip RapidAPI enrichment for ES availability")
-    p.add_argument("--skip-omdb", action="store_true", help="Skip OMDb enrichment (IMDb/RT/Metacritic scores)")
     p.add_argument("--genre-sweep", action="store_true",
                    help="Discover titles by genre×decade (no platform filter). "
-                        "Reaches 5k+ unique titles. Combine with --skip-omdb etc.")
+                        "Reaches 5k+ unique titles.")
     p.add_argument("--genre-sweep-pages", type=int, default=5,
                    help="Pages per genre×decade×media_type combo (default 5 → ~100 titles each)")
     p.add_argument("--tmdb-ids", type=str, default=None,
@@ -651,11 +564,13 @@ def main() -> None:
         tmdb_ids = _parse_tmdb_ids(args.tmdb_ids)
 
     try:
-        run(limit=args.limit, platforms_filter=platforms_filter,
-            skip_rapidapi=args.skip_rapidapi,
-            skip_omdb=args.skip_omdb, tmdb_ids=tmdb_ids,
+        run(
+            limit=args.limit,
+            platforms_filter=platforms_filter,
+            tmdb_ids=tmdb_ids,
             genre_sweep=args.genre_sweep,
-            genre_sweep_pages=args.genre_sweep_pages)
+            genre_sweep_pages=args.genre_sweep_pages,
+        )
     except KeyboardInterrupt:
         log.warning("Interrupted")
         sys.exit(130)

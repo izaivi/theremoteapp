@@ -1,9 +1,11 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../l10n/app_localizations.dart';
 
 /// Sign-in screen — 4 entry points (Apple, Google, Magic Link, Guest).
 ///
@@ -305,6 +307,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 ),
               ),
 
+              // ---- Legal disclosure (Build 16 — Apple UGC compliance) ----
+              // Apple App Review expects Terms + Community Guidelines to be
+              // visible on the sign-in / sign-up surface so the user agrees
+              // before creating an account (even guest mode, since a guest
+              // session can still post UGC once upgraded).
+              const SizedBox(height: 18),
+              _LegalBlurb(),
+
               if (_error != null) ...[
                 const SizedBox(height: 14),
                 Container(
@@ -372,6 +382,82 @@ class _ProviderButton extends StatelessWidget {
                 : BorderSide.none,
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Tiny "By continuing, you agree to our Terms and Community Guidelines"
+/// disclosure. Both link labels are tappable and navigate to the bundled
+/// legal viewer. Apple UGC compliance — Build 16.
+class _LegalBlurb extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final linkStyle = TextStyle(
+      fontSize: 12,
+      height: 1.5,
+      color: AppColors.accent,
+      decoration: TextDecoration.underline,
+    );
+    const baseStyle = TextStyle(
+      fontSize: 12,
+      height: 1.5,
+      color: AppColors.textMuted,
+    );
+
+    // The l10n blurb uses placeholders {terms} and {guidelines} so the
+    // sentence structure differs per language. We build the RichText by
+    // splitting on those sentinels rather than formatting them inline —
+    // this keeps translators free to rearrange the sentence.
+    final template =
+        l10n.authLegalBlurb('{{TERMS}}', '{{GUIDELINES}}');
+    final spans = <InlineSpan>[];
+    var cursor = 0;
+    void addText(String s) {
+      if (s.isNotEmpty) spans.add(TextSpan(text: s, style: baseStyle));
+    }
+
+    // Find whichever marker appears first, append the link, and continue.
+    while (cursor < template.length) {
+      final tIdx = template.indexOf('{{TERMS}}', cursor);
+      final gIdx = template.indexOf('{{GUIDELINES}}', cursor);
+      final nextIdx = (tIdx == -1 && gIdx == -1)
+          ? -1
+          : (tIdx == -1
+              ? gIdx
+              : gIdx == -1
+                  ? tIdx
+                  : (tIdx < gIdx ? tIdx : gIdx));
+      if (nextIdx == -1) {
+        addText(template.substring(cursor));
+        break;
+      }
+      addText(template.substring(cursor, nextIdx));
+      if (nextIdx == tIdx) {
+        spans.add(TextSpan(
+          text: l10n.authTermsLink,
+          style: linkStyle,
+          recognizer: TapGestureRecognizer()
+            ..onTap = () => context.push('/legal/terms'),
+        ));
+        cursor = nextIdx + '{{TERMS}}'.length;
+      } else {
+        spans.add(TextSpan(
+          text: l10n.authGuidelinesLink,
+          style: linkStyle,
+          recognizer: TapGestureRecognizer()
+            ..onTap = () => context.push('/legal/guidelines'),
+        ));
+        cursor = nextIdx + '{{GUIDELINES}}'.length;
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Text.rich(
+        TextSpan(children: spans),
+        textAlign: TextAlign.center,
       ),
     );
   }

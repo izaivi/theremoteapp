@@ -9,6 +9,7 @@ import '../mock/mock_content.dart';
 import '../models/content.dart';
 import '../models/user_profile.dart';
 import 'auth_repository.dart';
+import 'ratings_repository.dart';
 import 'user_profile_repository.dart';
 
 /// ------------------------------------------------------------------
@@ -32,11 +33,30 @@ final catalogProvider = FutureProvider<List<Content>>((ref) async {
   final sb = Supabase.instance.client;
 
   // 1. Fetch all content rows (sorted by popularity).
-  final contentRows = await sb
-      .from('content')
-      .select()
-      .order('tmdb_popularity', ascending: false)
-      .limit(600);
+  //
+  // Build 16 fix — was `.limit(600)`, which silently hid ~90% of the catalog
+  // from Discover's client-side search. Classic titles (LOTR Two Towers,
+  // Breaking Dawn Part 2, Dark Knight, Burton/Schumacher Batman, Tron
+  // Legacy, etc.) sit outside the top 600 by current TMDB popularity and
+  // were therefore unsearchable — users saw "Sin resultados" for titles
+  // that actually exist with full availability data.
+  //
+  // PostgREST caps a single request at 1000 rows, so we page through with
+  // `.range()` until a chunk returns short. ~6.8k rows → 7 round-trips on
+  // first load, all hitting the same Postgres plan (popularity index).
+  // The full catalog is cached by the FutureProvider, so this only pays
+  // the cost on cold start and when auth state changes.
+  const pageSize = 1000;
+  final contentRows = <Map<String, dynamic>>[];
+  for (var offset = 0; ; offset += pageSize) {
+    final chunk = await sb
+        .from('content')
+        .select()
+        .order('tmdb_popularity', ascending: false)
+        .range(offset, offset + pageSize - 1);
+    contentRows.addAll(List<Map<String, dynamic>>.from(chunk));
+    if (chunk.length < pageSize) break;
+  }
 
   // 2. Fetch availability for user's country.
   final availRows = await sb
@@ -109,12 +129,40 @@ final contentByIdProvider =
 // but reading from the catalog provider.
 // ---------------------------------------------------------------------------
 
-/// Trending = top by TMDB popularity, filtered by user's active platforms.
+/// Build the exclusion set: any title the user has already engaged with
+/// (Long Quiz seed, marked watched at runtime, dismissed, or rated) should
+/// not reappear in discovery surfaces. "Already engaged" means we already
+/// know enough; surfacing it again is noise.
+///
+/// Used by every taste-aware row on Home AND by Discover idle sections.
+/// `dontWasteProvider` applies the same exclusion because a warning is
+/// irrelevant for titles the user has already seen or passed on.
+///
+/// Active search/filter results in Discover deliberately bypass this — if
+/// the user types "FROM" it should appear even if they rated it.
+Set<String> _buildExclusionSet(UserProfile profile, Map<String, int> ratings) {
+  return {...profile.watchedIds, ...profile.dismissedIds, ...ratings.keys};
+}
+
+/// Public provider exposing the engaged-titles exclusion set. Surfaces that
+/// want to hide already-engaged content (Discover idle sections, future
+/// "for you" rails, etc.) can `ref.watch(engagedExclusionProvider)` instead
+/// of duplicating the union logic.
+final engagedExclusionProvider = Provider<Set<String>>((ref) {
+  final profile = ref.watch(userProfileProvider);
+  final ratings = ref.watch(ratingsProvider);
+  return _buildExclusionSet(profile, ratings);
+});
+
+/// Trending = top by TMDB popularity, filtered by user's active platforms
+/// and excluding titles the user has already engaged with.
 final trendingProvider = FutureProvider<List<Content>>((ref) async {
   final catalog = await ref.watch(catalogProvider.future);
   final profile = ref.watch(userProfileProvider);
+  final ratings = ref.watch(ratingsProvider);
+  final excluded = _buildExclusionSet(profile, ratings);
   return catalog
-      .where((c) => _matchesPlatforms(c, profile))
+      .where((c) => !excluded.contains(c.id) && _matchesPlatforms(c, profile))
       .take(20)
       .toList();
 });
@@ -124,9 +172,12 @@ final trendingProvider = FutureProvider<List<Content>>((ref) async {
 final explodingProvider = FutureProvider<List<Content>>((ref) async {
   final catalog = await ref.watch(catalogProvider.future);
   final profile = ref.watch(userProfileProvider);
+  final ratings = ref.watch(ratingsProvider);
+  final excluded = _buildExclusionSet(profile, ratings);
   final now = DateTime.now().year;
   return catalog
       .where((c) =>
+          !excluded.contains(c.id) &&
           c.year >= now - 1 &&
           c.tmdbId != null &&
           _matchesPlatforms(c, profile))
@@ -135,25 +186,63 @@ final explodingProvider = FutureProvider<List<Content>>((ref) async {
 });
 
 /// Quick decision = movies under 115 min, sorted by popularity.
+///
+/// Cascading fallback so the row never collapses to empty: if the strict
+/// pool (movie + ≤115 min + platform + not-engaged) is too thin we drop the
+/// duration cap, then the platform filter. Without this, a user who engages
+/// with most of the short-movie catalog just loses the row — not the
+/// intended behavior.
 final quickDecisionProvider = FutureProvider<List<Content>>((ref) async {
   final catalog = await ref.watch(catalogProvider.future);
   final profile = ref.watch(userProfileProvider);
+  final ratings = ref.watch(ratingsProvider);
+  final excluded = _buildExclusionSet(profile, ratings);
+
+  bool notEngaged(Content c) => !excluded.contains(c.id);
+  bool isMovie(Content c) => c.type == ContentType.movie;
+  bool isShort(Content c) => c.durationMinutes > 0 && c.durationMinutes <= 115;
+  bool onPlatform(Content c) => _matchesPlatforms(c, profile);
+
+  // Pool 1: strict — movie + short + platform + not engaged.
+  var pool = catalog
+      .where((c) => notEngaged(c) && isMovie(c) && isShort(c) && onPlatform(c))
+      .toList();
+  if (pool.length >= 5) return pool.take(15).toList();
+
+  // Cascade 1: drop duration cap, keep platform + movie.
+  pool = catalog
+      .where((c) => notEngaged(c) && isMovie(c) && onPlatform(c))
+      .toList();
+  if (pool.length >= 5) return pool.take(15).toList();
+
+  // Cascade 2: drop platform, keep movie + short.
+  pool = catalog
+      .where((c) => notEngaged(c) && isMovie(c) && isShort(c))
+      .toList();
+  if (pool.isNotEmpty) return pool.take(15).toList();
+
+  // Last resort: any movie not engaged with.
   return catalog
-      .where((c) =>
-          c.type == ContentType.movie &&
-          c.durationMinutes <= 115 &&
-          _matchesPlatforms(c, profile))
+      .where((c) => notEngaged(c) && isMovie(c))
       .take(15)
       .toList();
 });
 
-/// Don't waste = lowest scored content with some popularity (anti-rec).
-/// Placeholder: titles with low imdb scores but high popularity.
+/// Don't waste = lowest scored content (anti-rec).
 /// Platform-agnostic on purpose — the warning applies regardless of where it
-/// streams.
+/// streams — but still excludes titles the user has already engaged with
+/// (a warning about a movie they've already rated 4★ is incoherent).
 final dontWasteProvider = FutureProvider<List<Content>>((ref) async {
   final catalog = await ref.watch(catalogProvider.future);
-  final withScores = catalog.where((c) => c.imdbScore != null && c.imdbScore! < 5.5).toList()
+  final profile = ref.watch(userProfileProvider);
+  final ratings = ref.watch(ratingsProvider);
+  final excluded = _buildExclusionSet(profile, ratings);
+  final withScores = catalog
+      .where((c) =>
+          !excluded.contains(c.id) &&
+          c.imdbScore != null &&
+          c.imdbScore! < 5.5)
+      .toList()
     ..sort((a, b) => (a.imdbScore ?? 0).compareTo(b.imdbScore ?? 0));
   return withScores.take(10).toList();
 });
@@ -173,6 +262,7 @@ final dailyGemsProvider = FutureProvider<List<Gem>>((ref) async {
 
   final catalog = await ref.watch(catalogProvider.future);
   final profile = ref.watch(userProfileProvider);
+  final ratings = ref.watch(ratingsProvider);
 
   // Creator takes with is_curated=true → 1.5x boost on composite score.
   final Set<int> curatedTmdbIds = {};
@@ -190,8 +280,10 @@ final dailyGemsProvider = FutureProvider<List<Gem>>((ref) async {
     // Boost, not a requirement — continue without it.
   }
 
-  // Exclude already-watched (Long Quiz seed + runtime) and dismissed titles.
-  final excluded = {...profile.watchedIds, ...profile.dismissedIds};
+  // Exclude anything the user has already engaged with: Long Quiz seed +
+  // runtime watched, dismissed, and rated titles. A rated title already has
+  // a verdict; surfacing it again is noise.
+  final excluded = _buildExclusionSet(profile, ratings);
 
   bool baseFilter(Content c) =>
       !excluded.contains(c.id) && _matchesPlatforms(c, profile);
@@ -248,9 +340,13 @@ final dailyGemsProvider = FutureProvider<List<Gem>>((ref) async {
 final popularInRegionProvider = FutureProvider<List<Content>>((ref) async {
   final catalog = await ref.watch(catalogProvider.future);
   final profile = ref.watch(userProfileProvider);
+  final ratings = ref.watch(ratingsProvider);
+  final excluded = _buildExclusionSet(profile, ratings);
   return catalog
       .where((c) =>
-          c.availablePlatforms.isNotEmpty && _matchesPlatforms(c, profile))
+          !excluded.contains(c.id) &&
+          c.availablePlatforms.isNotEmpty &&
+          _matchesPlatforms(c, profile))
       .take(20)
       .toList();
 });
@@ -259,12 +355,38 @@ final popularInRegionProvider = FutureProvider<List<Content>>((ref) async {
 final bingeableProvider = FutureProvider<List<Content>>((ref) async {
   final catalog = await ref.watch(catalogProvider.future);
   final profile = ref.watch(userProfileProvider);
+  final ratings = ref.watch(ratingsProvider);
+  final excluded = _buildExclusionSet(profile, ratings);
   return catalog
       .where((c) =>
-          c.type == ContentType.series && _matchesPlatforms(c, profile))
+          !excluded.contains(c.id) &&
+          c.type == ContentType.series &&
+          _matchesPlatforms(c, profile))
       .take(15)
       .toList();
 });
+
+/// Invalidate all taste-dependent Home rows after a quiz retake or any
+/// profile change that affects scoring / platform filtering / exclusion.
+///
+/// All row providers now share the same exclusion set
+/// (`watchedIds ∪ dismissedIds ∪ ratings.keys`), so any surface that
+/// discovers content needs to be refreshed when that set grows.
+/// `dontWasteProvider` stays platform-agnostic but still honors the
+/// exclusion (a warning about a title the user already rated is noise).
+///
+/// Called from the Fast/Long Quiz `_finish()` path when the user entered
+/// via "Change my preferences" in Settings — the expectation is that the
+/// user sees the effect immediately, not at the next daily seed rotation.
+void invalidateTasteRows(WidgetRef ref) {
+  ref.invalidate(dailyGemsProvider);
+  ref.invalidate(trendingProvider);
+  ref.invalidate(explodingProvider);
+  ref.invalidate(quickDecisionProvider);
+  ref.invalidate(dontWasteProvider);
+  ref.invalidate(popularInRegionProvider);
+  ref.invalidate(bingeableProvider);
+}
 
 // ---------------------------------------------------------------------------
 // Row → Content mapper
@@ -320,6 +442,7 @@ Content _mapRowToContent(
     director: r['director'] as String?,
     cast: (r['cast_list'] as List<dynamic>?)?.cast<String>() ?? [],
     availablePlatforms: platforms,
+    originalLanguage: r['original_language'] as String?,
   );
 }
 

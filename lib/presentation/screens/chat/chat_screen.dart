@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -94,11 +95,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final takes = ref.read(latestTakesProvider).valueOrNull ?? [];
 
     final userRatings = ref.read(ratingsProvider);
+    // Fase 4: profile + engaged exclusion (same contract as Home / Discover idle).
+    final profile = ref.read(userProfileProvider);
+    final excluded = ref.read(engagedExclusionProvider);
 
     // Extract previous query context for conversation continuity.
     final msgs = ref.read(_chatMessagesProvider);
     String? prevQuery;
     List<String>? prevResultIds;
+    String? prevReplyText;
     // Walk backwards to find the last user message + its AI reply.
     for (int i = msgs.length - 1; i >= 0; i--) {
       if (msgs[i].sender == ChatSender.user) {
@@ -107,6 +112,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         if (i + 1 < msgs.length && msgs[i + 1].sender == ChatSender.ai) {
           prevResultIds = msgs[i + 1].recommendedContentIds;
         }
+        break;
+      }
+    }
+    // Last AI reply text — lets Remoty interpret follow-up "ok / dale / yes"
+    // as "act on what you just offered" (e.g. the bolded theme in a greeting).
+    for (int i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].sender == ChatSender.ai) {
+        prevReplyText = msgs[i].text;
         break;
       }
     }
@@ -120,6 +133,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ratings: userRatings,
       previousQuery: prevQuery,
       previousResultIds: prevResultIds,
+      previousReplyText: prevReplyText,
+      userProfile: profile,
+      excluded: excluded,
     );
     final reply = engine.reply(text, spanish: isSpanish);
 
@@ -587,13 +603,80 @@ class _QuotaBadge extends StatelessWidget {
 // Empty state — Remoty mascot + quick-prompt chips
 // ---------------------------------------------------------------------------
 
-class _EmptyState extends StatelessWidget {
+/// Empty state with rotating welcome copy.
+///
+/// Was static (`l10n.chatEmptyTitle` / `chatEmptyBody`) and felt monotonous
+/// once you'd seen it twice (Vivi feedback 2026-04-14). Now picks a random
+/// variant on each entry into the chat tab and falls back to the canonical
+/// l10n strings when the locale isn't EN/ES (defensive — should never hit
+/// in practice since the app is bilingual EN/ES today).
+class _EmptyState extends StatefulWidget {
   final void Function(String) onQuickTap;
   const _EmptyState({required this.onQuickTap});
 
   @override
+  State<_EmptyState> createState() => _EmptyStateState();
+}
+
+class _EmptyStateState extends State<_EmptyState> {
+  // Title + body pairs. Indexed in lockstep so a randomly-picked variant
+  // gets a coherent title/body combo (not a mash-up).
+  static const _variantsEn = <({String title, String body})>[
+    (
+      title: 'What are we watching?',
+      body: 'Tell me a mood, a genre, or just what you feel like.',
+    ),
+    (
+      title: 'Got an hour? Let\'s pick something.',
+      body: 'I know your catalog inside out. Hit me with a vibe.',
+    ),
+    (
+      title: 'No judgment, all picks.',
+      body: 'Mood, platform, director — anything works.',
+    ),
+    (
+      title: 'Your night, sorted.',
+      body: 'Type a vibe or tap a chip below to get started.',
+    ),
+  ];
+
+  static const _variantsEs = <({String title, String body})>[
+    (
+      title: '¿Qué vemos hoy?',
+      body: 'Dime un mood, un género, o lo que se te antoje.',
+    ),
+    (
+      title: '¿Tienes una hora? Vamos a elegir algo.',
+      body: 'Me sé tu catálogo de memoria. Aviéntame un vibe.',
+    ),
+    (
+      title: 'Cero juicio, puros picks.',
+      body: 'Mood, plataforma, director — lo que quieras.',
+    ),
+    (
+      title: 'Tu noche, resuelta.',
+      body: 'Escribe un vibe o toca un chip abajo.',
+    ),
+  ];
+
+  late final ({String title, String body}) _variant;
+
+  @override
+  void initState() {
+    super.initState();
+    // Locale isn't available in initState — pick from EN as a safe default
+    // and let `build` swap to the matching ES variant if needed. Both lists
+    // are the same length so the index stays meaningful across languages.
+    _variant = _variantsEn[Random().nextInt(_variantsEn.length)];
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final isSpanish = Localizations.localeOf(context).languageCode == 'es';
+    final idx = _variantsEn.indexOf(_variant);
+    final picked = isSpanish ? _variantsEs[idx] : _variant;
+
     final quicks = <(IconData, String)>[
       (Icons.timer_outlined, l10n.chatQuickShort),
       (Icons.weekend_outlined, l10n.chatQuickBinge),
@@ -636,13 +719,13 @@ class _EmptyState extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         Text(
-          l10n.chatEmptyTitle,
+          picked.title,
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 8),
         Text(
-          l10n.chatEmptyBody,
+          picked.body,
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 13,
@@ -660,7 +743,7 @@ class _EmptyState extends StatelessWidget {
               _QuickChip(
                 icon: q.$1,
                 label: q.$2,
-                onTap: () => onQuickTap(q.$2),
+                onTap: () => widget.onQuickTap(q.$2),
               ),
           ],
         ),

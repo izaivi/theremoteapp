@@ -1,7 +1,7 @@
 name: the_remote
 description: The Remote — Streaming intelligence app. iOS-first.
 publish_to: "none"
-version: 0.1.0+1
+version: 0.1.0+3
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -42,6 +42,9 @@ dependencies:
   url_launcher: ^6.2.5
   flutter_svg: ^2.0.10
   shimmer: ^3.0.0
+  # Renders Terms of Use / Community Guidelines from bundled .md assets.
+  # Needed for Apple UGC compliance (Build 16) — in-app readable legal text.
+  flutter_markdown: ^0.7.1
 
   # Geo (auto-detect región)
   geolocator: ^11.0.0
@@ -78,6 +81,8 @@ flutter:
     - assets/images/
     - assets/avatars/
     - assets/mascots/
+    # Terms of Use + Community Guidelines — rendered in-app by LegalViewer.
+    - assets/legal/
 
 flutter_launcher_icons:
   android: true

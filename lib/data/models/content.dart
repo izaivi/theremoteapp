@@ -70,6 +70,10 @@ class Content {
   // Available platforms in user's region (denormalized for UI speed)
   final List<String> availablePlatforms;
 
+  // ISO 639-1 original language code (ja, en, ko, zh, es, ...).
+  // Usado para filtros tipo anime estricto (Animation + ja), K-drama (ko), etc.
+  final String? originalLanguage;
+
   const Content({
     required this.id,
     this.tmdbId,
@@ -97,6 +101,7 @@ class Content {
     this.director,
     this.cast = const [],
     required this.availablePlatforms,
+    this.originalLanguage,
   });
 }
 

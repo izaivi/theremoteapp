@@ -2,16 +2,66 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/prefs/language_prefs.dart'; // uiLocaleProvider — Build 16 bilingual takes
 import '../../../core/theme/app_colors.dart';
 import '../../../data/mock/mock_creators.dart';
 import '../../../data/models/content.dart';
 import '../../../data/models/creator.dart';
+import '../../../data/repositories/auth_repository.dart';
+import '../../../data/repositories/blocks_repository.dart';
 import '../../../data/repositories/catalog_provider.dart';
 import '../../../data/repositories/creators_provider.dart';
 import '../../../data/repositories/follows_repository.dart';
+import '../../../data/repositories/reports_repository.dart';
 import '../../../data/repositories/user_profile_repository.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../widgets/take_context_menu.dart';
 import '../../widgets/user_avatar.dart';
+
+/// Shared confirm-block dialog. Used from the app-bar ⋯ menu on the
+/// creator profile and from the per-take context menu. Invokes
+/// `blocksProvider.notifier.block` and surfaces success/failure as a
+/// snackbar. Safe to call with a non-mounted context — it no-ops after
+/// the await.
+Future<void> _confirmBlock(
+  BuildContext context,
+  WidgetRef ref, {
+  required String alias,
+  required String userId,
+}) async {
+  final l10n = AppLocalizations.of(context)!;
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: AppColors.surface,
+      title: Text(l10n.blockConfirmTitle(alias)),
+      content: Text(l10n.blockConfirmBody),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: Text(l10n.blockConfirmCta),
+        ),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+
+  final success =
+      await ref.read(blocksProvider.notifier).block(userId);
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(success ? l10n.blockedState : l10n.reportError),
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 2),
+    ),
+  );
+}
 
 /// Individual creator profile: bio + stats + their takes.
 class CreatorDetailScreen extends ConsumerWidget {
@@ -41,12 +91,40 @@ class CreatorDetailScreen extends ConsumerWidget {
     final currentCreator = ref.watch(currentCreatorProvider).valueOrNull;
     final isOwnProfile = currentCreator?.id == creator.id;
 
+    // Build 16 — block state. A creator without a resolvable user_id
+    // (curated system creators pre-Build-16) can't be blocked; hide the
+    // control in that case.
+    final blocked = ref.watch(blocksProvider);
+    final blockableUid = creator.userId;
+    final isBlocked =
+        blockableUid != null && blocked.contains(blockableUid);
+    final canBlock =
+        !isOwnProfile && blockableUid != null && ref.watch(currentUserProvider) != null;
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
+        // Build 16 — ⋯ menu gives Report + (when blockable) Block against
+        // the whole creator profile. Hidden on own profile.
+        actions: [
+          if (!isOwnProfile)
+            TakeContextMenuButton(
+              targetType: ReportTargetType.creatorProfile,
+              targetId: creator.id,
+              iconColor: Colors.white70,
+              onBlock: canBlock && !isBlocked
+                  ? () => _confirmBlock(
+                        context,
+                        ref,
+                        alias: creator.alias,
+                        userId: blockableUid!,
+                      )
+                  : null,
+            ),
+        ],
       ),
       body: SafeArea(
         top: false,
@@ -106,34 +184,67 @@ class CreatorDetailScreen extends ConsumerWidget {
               style: const TextStyle(fontSize: 14, height: 1.4),
             ),
             const SizedBox(height: 16),
-            // Hide follow button on own profile
+            // Hide follow button on own profile. When this creator is
+            // already blocked we swap the Follow CTA for a gentle
+            // "Blocked — tap to unblock" affordance; following a user
+            // you've also blocked is nonsensical, so the two controls
+            // are mutually exclusive.
             if (!isOwnProfile)
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () async {
-                      await ref.read(followsProvider.notifier).toggle(creator.id);
-                      // Refresh creator data so followers_count updates
-                      // (Supabase trigger increments/decrements the counter).
-                      ref.invalidate(creatorByIdProvider(creator.id));
-                    },
-                  icon: Icon(
-                      isFollowing ? Icons.check : Icons.add,
-                      size: 18),
-                  label: Text(isFollowing
-                      ? l10n.creatorsFollowing
-                      : l10n.creatorsFollow),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        isFollowing ? Colors.white12 : AppColors.accent,
-                    foregroundColor: isFollowing ? Colors.white : Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    textStyle: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w700),
-                  ),
-                ),
+                child: isBlocked
+                    ? OutlinedButton.icon(
+                        onPressed: () async {
+                          await ref
+                              .read(blocksProvider.notifier)
+                              .unblock(blockableUid!);
+                        },
+                        icon: const Icon(Icons.block, size: 18),
+                        label: Text(l10n.unblockAction),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.redAccent,
+                          side: const BorderSide(color: Colors.redAccent),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          textStyle: const TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w700),
+                        ),
+                      )
+                    : ElevatedButton.icon(
+                        onPressed: () async {
+                          // `toggle` now awaits the remote upsert/delete so the
+                          // `trg_follower_count` trigger on `user_follows` has
+                          // already run by the time we invalidate below. Before
+                          // the awaited version, the re-read raced the INSERT
+                          // and showed the pre-toggle count until app restart.
+                          await ref
+                              .read(followsProvider.notifier)
+                              .toggle(creator.id);
+                          // Refresh both the detail view and the global creators
+                          // list so the counter updates in every surface that
+                          // displays it (detail header + creators grid).
+                          ref.invalidate(creatorByIdProvider(creator.id));
+                          ref.invalidate(creatorsProvider);
+                        },
+                        icon: Icon(
+                            isFollowing ? Icons.check : Icons.add,
+                            size: 18),
+                        label: Text(isFollowing
+                            ? l10n.creatorsFollowing
+                            : l10n.creatorsFollow),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              isFollowing ? Colors.white12 : AppColors.accent,
+                          foregroundColor:
+                              isFollowing ? Colors.white : Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          textStyle: const TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w700),
+                        ),
+                      ),
               ),
             const SizedBox(height: 28),
             Text(
@@ -183,12 +294,26 @@ class _BigAvatar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final currentCreator = ref.watch(currentCreatorProvider).valueOrNull;
     final isMe = currentCreator?.id == creatorId;
-    final profile = isMe ? ref.watch(userProfileProvider) : null;
+
+    // Build 16 — resolve cross-user avatars via public_profiles. Mirrors
+    // _SmartAvatar on creators_screen so the profile-detail hero image
+    // matches what's shown in the carousel / feed.
+    String? resolvedAvatarKey;
+    if (isMe) {
+      resolvedAvatarKey = ref.watch(userProfileProvider).avatarKey;
+    } else {
+      final creatorAsync = ref.watch(creatorByIdProvider(creatorId));
+      final uid = creatorAsync.valueOrNull?.userId;
+      if (uid != null) {
+        resolvedAvatarKey =
+            ref.watch(publicProfileByIdProvider(uid)).valueOrNull?.avatarKey;
+      }
+    }
 
     final Widget avatarContent;
-    if (isMe && profile != null) {
+    if (resolvedAvatarKey != null) {
       avatarContent = UserAvatar(
-        avatarKey: profile.avatarKey,
+        avatarKey: resolvedAvatarKey,
         seed: alias,
         size: 84,
         withBorder: false,
@@ -346,7 +471,21 @@ class _DetailTakeRow extends ConsumerWidget {
     };
 
     return GestureDetector(
-      onTap: () => context.push('/content/${content.id}'),
+      onTap: () => showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: AppColors.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (_) => _TakeDetailSheet(
+          take: take,
+          content: content,
+          creator: creator,
+          verdictColor: verdictColor,
+          verdictLabel: verdictLabel,
+        ),
+      ),
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -406,11 +545,36 @@ class _DetailTakeRow extends ConsumerWidget {
                           ),
                         ),
                       ),
+                      // Build 16 — Report/Block menu on takes authored by
+                      // OTHERS. Own takes already have Edit/Delete below,
+                      // so no need for the menu there.
+                      if (!isOwn && creator != null)
+                        TakeContextMenuButton(
+                          targetType: ReportTargetType.creatorTake,
+                          targetId: take.id,
+                          iconColor: Colors.white54,
+                          onBlock: (creator!.userId != null &&
+                                  ref.watch(currentUserProvider) != null &&
+                                  !ref
+                                      .watch(blocksProvider)
+                                      .contains(creator!.userId))
+                              ? () => _confirmBlock(
+                                    context,
+                                    ref,
+                                    alias: creator!.alias,
+                                    userId: creator!.userId!,
+                                  )
+                              : null,
+                        ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    take.body,
+                    // Build 16 — locale-aware. Falls back gracefully when the
+                    // active-locale column hasn't been populated yet.
+                    take.localizedBody(
+                      ref.watch(uiLocaleProvider)?.languageCode,
+                    ),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 12, height: 1.35),
@@ -501,7 +665,13 @@ class _EditTakeSheetState extends ConsumerState<_EditTakeSheet> {
   @override
   void initState() {
     super.initState();
-    _controller.text = widget.existingTake.body;
+    // Build 16 — pre-load the editor with whatever the user sees in the
+    // UI for their active locale (not the legacy `body` column). Without
+    // this a creator browsing in ES who taps "edit" on a take they'd been
+    // reading in ES would see the EN original in the editor and overwrite
+    // the wrong column on save.
+    final locale = ref.read(uiLocaleProvider)?.languageCode;
+    _controller.text = widget.existingTake.localizedBody(locale);
     _verdict = switch (widget.existingTake.verdict) {
       CreatorVerdict.worthIt => 'worth_it',
       CreatorVerdict.skipIt => 'skip_it',
@@ -519,11 +689,16 @@ class _EditTakeSheetState extends ConsumerState<_EditTakeSheet> {
     if (body.isEmpty) return;
     setState(() => _submitting = true);
 
+    // Build 16 — record authoring locale; defaults to 'en' (launch language).
+    final activeLocale = ref.read(uiLocaleProvider)?.languageCode;
+    final originalLanguage = activeLocale == 'es' ? 'es' : 'en';
+
     final ok = await updateTake(
       takeId: widget.existingTake.id,
       verdict: _verdict,
       body: body,
       currentEditCount: widget.existingTake.editCount,
+      originalLanguage: originalLanguage,
     );
 
     if (!mounted) return;
@@ -644,6 +819,169 @@ class _EditTakeSheetState extends ConsumerState<_EditTakeSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Build 16 — full-body read sheet shown when a creator-profile take row
+/// is tapped. Replaces the old behavior (which pushed to the content
+/// detail screen) so readers can actually see the whole take without the
+/// 3-line ellipsis of the row summary. The "View title" button preserves
+/// one-tap access to the content detail screen for the cases where the
+/// user actually wanted the movie page.
+class _TakeDetailSheet extends ConsumerWidget {
+  final CreatorTake take;
+  final Content content;
+  final Creator? creator;
+  final Color verdictColor;
+  final String verdictLabel;
+  const _TakeDetailSheet({
+    required this.take,
+    required this.content,
+    required this.creator,
+    required this.verdictColor,
+    required this.verdictLabel,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final locale = ref.watch(uiLocaleProvider)?.languageCode;
+    final body = take.localizedBody(locale);
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.75,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      builder: (_, scrollCtrl) => Padding(
+        padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + bottomInset),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Title strip: poster + title + verdict chip.
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    width: 52,
+                    height: 78,
+                    child: content.posterUrl.isEmpty
+                        ? Container(color: Colors.white12)
+                        : Image.network(
+                            content.posterUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) =>
+                                Container(color: Colors.white12),
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        content.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: verdictColor.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                              color: verdictColor.withOpacity(0.4)),
+                        ),
+                        child: Text(
+                          verdictLabel,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: verdictColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (creator != null)
+              Row(
+                children: [
+                  Icon(Icons.person_outline,
+                      size: 14,
+                      color: Theme.of(context).textTheme.bodySmall?.color),
+                  const SizedBox(width: 4),
+                  Text(
+                    creator!.alias,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).textTheme.bodySmall?.color,
+                    ),
+                  ),
+                ],
+              ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: scrollCtrl,
+                child: Text(
+                  body,
+                  style: const TextStyle(fontSize: 15, height: 1.45),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  context.push('/content/${content.id}');
+                },
+                icon: const Icon(Icons.open_in_new, size: 16),
+                label: const Text('View title'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white24),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

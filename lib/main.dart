@@ -82,6 +82,18 @@ class TheRemoteApp extends ConsumerWidget {
           final uid = state.session?.user.id;
           if (uid != null) await identifyRevenueCatUser(uid);
 
+          // Build 16 fix — cold-start race:
+          // The controller's constructor kicks off `_load()` async (reads
+          // SharedPreferences). On cold start, `AuthChangeEvent.signedIn`
+          // can fire before `_load` resolves, so `state.id` is still null
+          // (anonymous initial state). The `currentProfileId != uid` check
+          // then always evaluates true → reset() wipes SharedPrefs → user
+          // gets kicked to /onboarding even though their profile was on
+          // disk the whole time.
+          //
+          // `ensureLoaded()` resolves the completer set up by the
+          // controller, guaranteeing hydration before the identity check.
+          await ref.read(userProfileProvider.notifier).ensureLoaded();
           final currentProfileId = ref.read(userProfileProvider).id;
           if (currentProfileId != uid) {
             await ref.read(userProfileProvider.notifier).reset();

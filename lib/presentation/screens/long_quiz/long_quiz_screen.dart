@@ -37,6 +37,38 @@ class _LongQuizScreenState extends ConsumerState<LongQuizScreen> {
   final Map<String, _TileState> _tiles = {};
   final TextEditingController _themes = TextEditingController();
 
+  /// Retake mode: entered from Settings → "Change my preferences"
+  /// (URL has `?retake=1`). When true, pre-fill tiles + themes from
+  /// the current profile / vault, and on finish return to /settings
+  /// with a SnackBar instead of the celebratory home redirect.
+  bool _retake = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final retake =
+          GoRouterState.of(context).uri.queryParameters['retake'] == '1';
+      if (!retake) return;
+
+      final profile = ref.read(userProfileProvider);
+      final vault = ref.read(vaultProvider);
+
+      setState(() {
+        _retake = true;
+        // Pre-fill themes from the stored favoriteThemes.
+        _themes.text = profile.favoriteThemes.join(', ');
+        // Pre-fill tri-state grid: tiles in watchedIds start as `seen`,
+        // and those currently marked loved in the vault upgrade to `loved`.
+        // Catalog tiles that aren't in watchedIds stay `none`.
+        for (final id in profile.watchedIds) {
+          _tiles[id] = vault.isLoved(id) ? _TileState.loved : _TileState.seen;
+        }
+      });
+    });
+  }
+
   @override
   void dispose() {
     _themes.dispose();
@@ -94,6 +126,24 @@ class _LongQuizScreenState extends ConsumerState<LongQuizScreen> {
     }
 
     if (!mounted) return;
+
+    if (_retake) {
+      // Refresh Home taste rows immediately; skip the celebratory dialog
+      // (the user came from Settings with intent, not first-time wow).
+      invalidateTasteRows(ref);
+      final messenger = ScaffoldMessenger.of(context);
+      context.go('/settings');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Preferences updated'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      });
+      return;
+    }
+
     _showDoneAndPop();
   }
 

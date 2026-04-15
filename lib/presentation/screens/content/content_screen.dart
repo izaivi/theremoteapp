@@ -5,20 +5,71 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/prefs/language_prefs.dart'; // uiLocaleProvider — Build 16 bilingual takes
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/content.dart';
 import '../../../data/models/creator.dart';
 import '../../../data/repositories/catalog_provider.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/models/quick_take.dart' as qt;
+import '../../../data/repositories/blocks_repository.dart';
+import '../../../data/repositories/community_guidelines_repository.dart';
 import '../../../data/repositories/creators_provider.dart';
 import '../../../data/repositories/quick_takes_provider.dart';
 import '../../../data/repositories/ratings_repository.dart';
+import '../../../data/repositories/reports_repository.dart';
 import '../../../data/repositories/user_profile_repository.dart';
 import '../../../data/repositories/vault_repository.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../widgets/community_guidelines_sheet.dart';
 import '../../widgets/paywall_sheet.dart';
+import '../../widgets/take_context_menu.dart';
 import '../../widgets/watcher_score_badge.dart';
+
+/// Shared confirm-block dialog for UGC surfaces on content detail
+/// (creator takes + quick takes). Mirrors the helper in
+/// `creator_detail_screen.dart` so the experience is identical across
+/// surfaces. Invokes `blocksProvider.notifier.block` and surfaces
+/// success/failure as a snackbar.
+Future<void> _confirmBlock(
+  BuildContext context,
+  WidgetRef ref, {
+  required String alias,
+  required String userId,
+}) async {
+  final l10n = AppLocalizations.of(context)!;
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: AppColors.surface,
+      title: Text(l10n.blockConfirmTitle(alias)),
+      content: Text(l10n.blockConfirmBody),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: Text(l10n.blockConfirmCta),
+        ),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+
+  final success =
+      await ref.read(blocksProvider.notifier).block(userId);
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(success ? l10n.blockedState : l10n.reportError),
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 2),
+    ),
+  );
+}
 
 /// Content detail — where both functions of the product meet:
 ///
@@ -551,13 +602,16 @@ class _CreatorTakesSection extends ConsumerWidget {
   }
 }
 
-class _CreatorTakeCard extends StatelessWidget {
+class _CreatorTakeCard extends ConsumerWidget {
   final CreatorTake take;
   final Creator? creator;
   const _CreatorTakeCard({required this.take, this.creator});
 
+  // Build 16 — promoted from StatelessWidget to ConsumerWidget so the
+  // body Text below can read the active locale via uiLocaleProvider and
+  // call take.localizedBody(...) for bilingual rendering.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final verdictColor = switch (take.verdict) {
       CreatorVerdict.worthIt => AppColors.accent,
       CreatorVerdict.skipIt => const Color(0xFFE5484D),
@@ -566,6 +620,17 @@ class _CreatorTakeCard extends StatelessWidget {
       CreatorVerdict.worthIt => 'Worth it',
       CreatorVerdict.skipIt => 'Skip it',
     };
+
+    // Build 16 — UGC context menu. Only wire Block when we can resolve
+    // the take author to an auth user id, the current user is signed in,
+    // and the author isn't the current user (can't block yourself).
+    final currentUser = ref.watch(currentUserProvider);
+    final blocked = ref.watch(blocksProvider);
+    final authorUid = creator?.userId;
+    final canBlockAuthor = currentUser != null &&
+        authorUid != null &&
+        authorUid != currentUser.id &&
+        !blocked.contains(authorUid);
 
     return Container(
       width: double.infinity,
@@ -608,11 +673,29 @@ class _CreatorTakeCard extends StatelessWidget {
                   ),
                 ),
               ),
+              // ⋯ menu — Report always; Block when canBlockAuthor.
+              // Hidden on own takes (currentUser == authorUid).
+              if (currentUser == null || currentUser.id != authorUid) ...[
+                const SizedBox(width: 4),
+                TakeContextMenuButton(
+                  targetType: ReportTargetType.creatorTake,
+                  targetId: take.id,
+                  iconColor: Colors.white54,
+                  onBlock: canBlockAuthor
+                      ? () => _confirmBlock(
+                            context,
+                            ref,
+                            alias: creator?.alias ?? 'user',
+                            userId: authorUid,
+                          )
+                      : null,
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 6),
           Text(
-            take.body,
+            take.localizedBody(ref.watch(uiLocaleProvider)?.languageCode),
             maxLines: 4,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -704,6 +787,11 @@ class _QuickTakeCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isOwn = currentUserId == quickTake.userId;
+    // Build 16 — UGC filtering & block awareness. Blocked set is already
+    // applied upstream in `quickTakesByContentProvider`, but we still need
+    // it here to suppress the Block option on already-blocked authors.
+    final blocked = ref.watch(blocksProvider);
+    final alreadyBlocked = blocked.contains(quickTake.userId);
 
     return Container(
       width: double.infinity,
@@ -715,8 +803,13 @@ class _QuickTakeCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Build 16 — bilingual rendering. Show the take in the
+          // active UI locale with a fallback chain to the other
+          // language and then legacy `body`. Mirrors _CreatorTakeCard.
           Text(
-            quickTake.body,
+            quickTake.localizedBody(
+              ref.watch(uiLocaleProvider)?.languageCode,
+            ),
             style: const TextStyle(
                 fontSize: 14, height: 1.35, color: AppColors.textPrimary),
           ),
@@ -813,6 +906,27 @@ class _QuickTakeCard extends ConsumerWidget {
                   },
                   child: const Icon(Icons.delete_outline,
                       size: 14, color: Color(0xFFE5484D)),
+                )
+              else
+                // Build 16 — UGC context menu on other users' quick takes.
+                // Report always; Block only when signed in and not already
+                // blocked (anonymous users get Report-only, matching
+                // creator takes behaviour).
+                TakeContextMenuButton(
+                  targetType: ReportTargetType.quickTake,
+                  targetId: quickTake.id,
+                  iconColor: AppColors.textMuted,
+                  onBlock: (currentUserId == null || alreadyBlocked)
+                      ? null
+                      : () => _confirmBlock(
+                            context,
+                            ref,
+                            // Quick takes don't expose an author alias in
+                            // the card — use a neutral fallback so the
+                            // confirm dialog still reads naturally.
+                            alias: 'this user',
+                            userId: quickTake.userId,
+                          ),
                 ),
             ],
           ),
@@ -840,7 +954,14 @@ class _WriteQuickTakeButton extends ConsumerWidget {
 
     return InkWell(
       onTap: canPost
-          ? () => showModalBottomSheet(
+          ? () async {
+              // Build 16 — UGC guidelines gate. First publish attempt for
+              // this account shows the Community Guidelines sheet; accept
+              // stamps the profile and we continue. Cancel aborts.
+              final ok =
+                  await ensureCommunityGuidelinesAccepted(context, ref);
+              if (!ok || !context.mounted) return;
+              await showModalBottomSheet(
                 context: context,
                 isScrollControlled: true,
                 backgroundColor: AppColors.background,
@@ -851,7 +972,8 @@ class _WriteQuickTakeButton extends ConsumerWidget {
                   content: content,
                   userId: userId,
                 ),
-              )
+              );
+            }
           : null,
       borderRadius: BorderRadius.circular(12),
       child: Container(
@@ -933,10 +1055,19 @@ class _QuickTakeComposeSheetState
       return;
     }
 
+    // Build 16 — stamp the originalLanguage from the active UI locale
+    // so translate-quick-take knows which side is the source. Defaults
+    // to 'en' if the locale isn't EN/ES (DeepL target will still be ES
+    // as the opposite and the take renders in EN either way).
+    final localeCode =
+        ref.read(uiLocaleProvider)?.languageCode.toLowerCase();
+    final originalLanguage = localeCode == 'es' ? 'es' : 'en';
+
     final ok = await submitQuickTake(
       userId: widget.userId,
       contentId: tmdbId,
       body: body,
+      originalLanguage: originalLanguage,
     );
 
     if (!mounted) return;
@@ -1247,7 +1378,16 @@ class _CreatorTakeAction extends ConsumerWidget {
                       ),
                     )
                 : null) // disabled — no edits remaining
-            : () => showModalBottomSheet(
+            : () async {
+                // Build 16 — UGC guidelines gate. First-time publish
+                // across the whole app (quick OR creator) shows the
+                // Community Guidelines sheet; accept stamps the profile
+                // and we continue. Edit-take path above skips the gate
+                // because editing implies a prior accept.
+                final ok =
+                    await ensureCommunityGuidelinesAccepted(context, ref);
+                if (!ok || !context.mounted) return;
+                await showModalBottomSheet(
                   context: context,
                   isScrollControlled: true,
                   backgroundColor: AppColors.background,
@@ -1259,7 +1399,8 @@ class _CreatorTakeAction extends ConsumerWidget {
                     creator: creator,
                     content: content,
                   ),
-                ),
+                );
+              },
         borderRadius: BorderRadius.circular(12),
         child: Container(
           width: double.infinity,
@@ -1341,7 +1482,12 @@ class _WriteTakeSheetState extends ConsumerState<_WriteTakeSheet> {
     super.initState();
     final existing = widget.existingTake;
     if (existing != null) {
-      _controller.text = existing.body;
+      // Build 16 — pre-load editor with the active-locale body, not the
+      // legacy column. See _EditTakeSheet in creator_detail_screen.dart
+      // for the full reasoning (avoids overwriting the wrong column when
+      // a creator browsing in ES taps "edit").
+      final locale = ref.read(uiLocaleProvider)?.languageCode;
+      _controller.text = existing.localizedBody(locale);
       _verdict = switch (existing.verdict) {
         CreatorVerdict.worthIt => 'worth_it',
         CreatorVerdict.skipIt => 'skip_it',
@@ -1361,6 +1507,14 @@ class _WriteTakeSheetState extends ConsumerState<_WriteTakeSheet> {
 
     setState(() => _submitting = true);
 
+    // Build 16 — record what the creator actually typed in. We treat the
+    // active UI locale as the authoring language: if you wrote it while
+    // your app was in Spanish, original_language='es'. Anything that
+    // isn't 'es' (including null / unsupported) defaults to 'en' since
+    // EN is the launch default.
+    final activeLocale = ref.read(uiLocaleProvider)?.languageCode;
+    final originalLanguage = activeLocale == 'es' ? 'es' : 'en';
+
     bool ok;
     if (_isEditing) {
       ok = await updateTake(
@@ -1368,6 +1522,7 @@ class _WriteTakeSheetState extends ConsumerState<_WriteTakeSheet> {
         verdict: _verdict,
         body: body,
         currentEditCount: widget.existingTake!.editCount,
+        originalLanguage: originalLanguage,
       );
     } else {
       final tmdbId = int.tryParse(widget.content.id);
@@ -1380,6 +1535,7 @@ class _WriteTakeSheetState extends ConsumerState<_WriteTakeSheet> {
         contentId: tmdbId,
         verdict: _verdict,
         body: body,
+        originalLanguage: originalLanguage,
       );
     }
 

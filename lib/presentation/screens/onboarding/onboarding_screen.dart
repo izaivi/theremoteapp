@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/prefs/language_prefs.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../data/repositories/catalog_provider.dart';
 import '../../../data/repositories/user_profile_repository.dart';
 import '../../../l10n/app_localizations.dart';
 
@@ -79,22 +80,58 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     ('Horror', 'horror'),
     ('Documentary', 'documentary'),
     ('Animation', 'animation'),
+    ('Anime', 'anime'),
     ('Crime', 'crime'),
     ('History', 'history'),
     ('Mystery', 'mystery'),
   ];
 
+  /// Retake mode: true when the user entered via
+  /// Settings → "Change my preferences" (URL has `?retake=1`). In that
+  /// case the screen pre-fills with the current profile values and, on
+  /// finish, invalidates taste-dependent providers + returns to /settings
+  /// instead of /home. Normal first-time onboarding is retake == false.
+  bool _retake = false;
+
   @override
   void initState() {
     super.initState();
-    // Seed country from the effective country provider.
+    // Seed country + retake pre-fill from the live profile.
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final retake =
+          GoRouterState.of(context).uri.queryParameters['retake'] == '1';
+      final profile = ref.read(userProfileProvider);
       final detected = ref.read(effectiveCountryProvider);
-      if (_countryCodes.contains(detected)) {
-        setState(() => _country = detected);
-      } else {
-        setState(() => _country = 'US');
-      }
+
+      setState(() {
+        _retake = retake;
+
+        // Country: if retake and profile has a stored country, honour it;
+        // otherwise fall back to detected (normal onboarding).
+        if (retake && profile.country != null &&
+            _countryCodes.contains(profile.country)) {
+          _country = profile.country;
+        } else if (_countryCodes.contains(detected)) {
+          _country = detected;
+        } else {
+          _country = 'US';
+        }
+
+        // Retake: pre-populate platforms + genres from the profile so
+        // the user tweaks instead of re-entering from scratch.
+        if (retake) {
+          _platforms
+            ..clear()
+            ..addAll(
+              profile.activePlatforms.where(_platformOptions.contains),
+            );
+          final genreKeys = _genreOptions.map((e) => e.$2).toSet();
+          _genres
+            ..clear()
+            ..addAll(profile.favoriteGenres.where(genreKeys.contains));
+        }
+      });
     });
   }
 
@@ -125,15 +162,40 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           curve: Curves.easeOutCubic);
       return;
     }
-    // Finish — persist quiz answers.
+    // Finish — persist quiz answers. `completeFastQuiz` is idempotent and
+    // upgrade-only on quizCompletion, so a retake from a Long-completed
+    // user stays at Long (see user_profile_repository.dart).
     await ref.read(userProfileProvider.notifier).completeFastQuiz(
           country: _country!,
           activePlatforms: _platforms.toList(),
           favoriteGenres: _genres.toList(),
         );
-    // Auth already happened before the quiz (Splash → Auth → Quiz → Home),
-    // so the session is live by the time we land here. Go straight home.
-    if (mounted) context.go('/home');
+
+    if (!mounted) return;
+
+    if (_retake) {
+      // Refresh Home rows immediately so the user sees the effect of
+      // the new platforms/genres without waiting for the next daily seed.
+      invalidateTasteRows(ref);
+      final messenger = ScaffoldMessenger.of(context);
+      context.go('/settings');
+      // Defer SnackBar one frame so the Settings scaffold is mounted
+      // before we try to attach to its ScaffoldMessenger.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Preferences updated'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      });
+      return;
+    }
+
+    // First-time onboarding: Auth already happened before the quiz
+    // (Splash → Auth → Quiz → Home), so the session is live by the
+    // time we land here. Go straight home.
+    context.go('/home');
   }
 
   void _back() {
@@ -460,6 +522,8 @@ class _GenresStep extends StatelessWidget {
         return l10n.genreDocumentary;
       case 'animation':
         return l10n.genreAnimation;
+      case 'anime':
+        return l10n.genreAnime;
       case 'crime':
         return l10n.genreCrime;
       case 'history':

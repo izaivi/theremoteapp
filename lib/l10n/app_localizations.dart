@@ -1478,6 +1478,12 @@ abstract class AppLocalizations {
   /// **'Animation'**
   String get genreAnimation;
 
+  /// No description provided for @genreAnime.
+  ///
+  /// In en, this message translates to:
+  /// **'Anime'**
+  String get genreAnime;
+
   /// No description provided for @genreCrime.
   ///
   /// In en, this message translates to:
@@ -1633,6 +1639,258 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not for me'**
   String get contentNotForMe;
+
+  /// No description provided for @legalTermsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Terms of Service'**
+  String get legalTermsTitle;
+
+  /// No description provided for @legalGuidelinesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Community Guidelines'**
+  String get legalGuidelinesTitle;
+
+  /// No description provided for @legalLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load this document.'**
+  String get legalLoadError;
+
+  /// No description provided for @legalOpenOnWeb.
+  ///
+  /// In en, this message translates to:
+  /// **'Open on web'**
+  String get legalOpenOnWeb;
+
+  /// No description provided for @profileCommunityGuidelines.
+  ///
+  /// In en, this message translates to:
+  /// **'Community Guidelines'**
+  String get profileCommunityGuidelines;
+
+  /// No description provided for @profileBlockedCreators.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked creators'**
+  String get profileBlockedCreators;
+
+  /// No description provided for @authLegalBlurb.
+  ///
+  /// In en, this message translates to:
+  /// **'By continuing, you agree to our {terms} and {guidelines}.'**
+  String authLegalBlurb(String terms, String guidelines);
+
+  /// No description provided for @authTermsLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Terms of Service'**
+  String get authTermsLink;
+
+  /// No description provided for @authGuidelinesLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Community Guidelines'**
+  String get authGuidelinesLink;
+
+  /// No description provided for @reportAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Report'**
+  String get reportAction;
+
+  /// No description provided for @reportSheetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What\'s wrong with this?'**
+  String get reportSheetTitle;
+
+  /// No description provided for @reportSheetSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'We\'ll review within 24 hours.'**
+  String get reportSheetSubtitle;
+
+  /// No description provided for @reportReasonSpam.
+  ///
+  /// In en, this message translates to:
+  /// **'Spam'**
+  String get reportReasonSpam;
+
+  /// No description provided for @reportReasonHarassment.
+  ///
+  /// In en, this message translates to:
+  /// **'Harassment or bullying'**
+  String get reportReasonHarassment;
+
+  /// No description provided for @reportReasonHate.
+  ///
+  /// In en, this message translates to:
+  /// **'Hate speech'**
+  String get reportReasonHate;
+
+  /// No description provided for @reportReasonOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get reportReasonOther;
+
+  /// No description provided for @reportNoteLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Tell us more (optional)'**
+  String get reportNoteLabel;
+
+  /// No description provided for @reportNoteRequiredLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Describe what\'s wrong'**
+  String get reportNoteRequiredLabel;
+
+  /// No description provided for @reportNoteRequiredError.
+  ///
+  /// In en, this message translates to:
+  /// **'Please describe the issue'**
+  String get reportNoteRequiredError;
+
+  /// No description provided for @reportSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Submit report'**
+  String get reportSubmit;
+
+  /// No description provided for @reportSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Report submitted. Our team will review it.'**
+  String get reportSuccess;
+
+  /// No description provided for @reportDuplicate.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve already reported this.'**
+  String get reportDuplicate;
+
+  /// No description provided for @reportError.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t submit report. Please try again.'**
+  String get reportError;
+
+  /// No description provided for @blockAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Block'**
+  String get blockAction;
+
+  /// No description provided for @blockedState.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked'**
+  String get blockedState;
+
+  /// No description provided for @unblockAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Unblock'**
+  String get unblockAction;
+
+  /// No description provided for @blockConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Block {alias}?'**
+  String blockConfirmTitle(String alias);
+
+  /// No description provided for @blockConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You won\'t see their takes or profile. They won\'t be notified.'**
+  String get blockConfirmBody;
+
+  /// No description provided for @blockConfirmCta.
+  ///
+  /// In en, this message translates to:
+  /// **'Block'**
+  String get blockConfirmCta;
+
+  /// No description provided for @blockedCreatorsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked creators'**
+  String get blockedCreatorsTitle;
+
+  /// No description provided for @blockedCreatorsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'You haven\'t blocked anyone.'**
+  String get blockedCreatorsEmpty;
+
+  /// No description provided for @blockedCreatorsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Unblock to start seeing their content again.'**
+  String get blockedCreatorsHelp;
+
+  /// No description provided for @guidelinesSheetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Community Guidelines'**
+  String get guidelinesSheetTitle;
+
+  /// No description provided for @guidelinesSheetSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Before posting, please agree to keep Flixscope a good place for everyone.'**
+  String get guidelinesSheetSubtitle;
+
+  /// No description provided for @guidelinesRuleHarassment.
+  ///
+  /// In en, this message translates to:
+  /// **'No harassment, threats, or hate speech.'**
+  String get guidelinesRuleHarassment;
+
+  /// No description provided for @guidelinesRuleObjectionable.
+  ///
+  /// In en, this message translates to:
+  /// **'No sexual, violent, or otherwise objectionable content.'**
+  String get guidelinesRuleObjectionable;
+
+  /// No description provided for @guidelinesRuleSpam.
+  ///
+  /// In en, this message translates to:
+  /// **'No spam, scams, or links to malicious sites.'**
+  String get guidelinesRuleSpam;
+
+  /// No description provided for @guidelinesRuleImpersonation.
+  ///
+  /// In en, this message translates to:
+  /// **'No impersonation of other people, creators, or brands.'**
+  String get guidelinesRuleImpersonation;
+
+  /// No description provided for @guidelinesRuleIp.
+  ///
+  /// In en, this message translates to:
+  /// **'Respect intellectual property — quote studios, don\'t steal.'**
+  String get guidelinesRuleIp;
+
+  /// No description provided for @guidelinesReadFull.
+  ///
+  /// In en, this message translates to:
+  /// **'Read the full Community Guidelines →'**
+  String get guidelinesReadFull;
+
+  /// No description provided for @guidelinesCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get guidelinesCancel;
+
+  /// No description provided for @guidelinesAccept.
+  ///
+  /// In en, this message translates to:
+  /// **'I Accept'**
+  String get guidelinesAccept;
 }
 
 class _AppLocalizationsDelegate

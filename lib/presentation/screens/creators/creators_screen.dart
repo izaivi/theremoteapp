@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/prefs/language_prefs.dart'; // uiLocaleProvider — Build 16 bilingual takes
 import '../../../core/theme/app_colors.dart';
 import '../../../data/mock/mock_creators.dart';
 import '../../../data/models/content.dart';
@@ -37,9 +38,32 @@ class CreatorsScreen extends ConsumerWidget {
     final featuredSkip = featuredSkipAsync.valueOrNull;
 
     return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-        children: [
+      // Build 16 — pull-to-refresh. `latestTakesProvider`, `creatorsProvider`,
+      // and `featuredSkipProvider` are FutureProviders that cache until the
+      // app restarts. Without a manual refresh, a take posted by another
+      // creator AFTER Vivi opened the tab doesn't show up until the process
+      // is killed. Invalidating all three on pull covers: new takes (feed +
+      // featured skip) AND new/edited creator rows (follower count, new
+      // creator joined, avatar changed).
+      child: RefreshIndicator(
+        color: AppColors.accent,
+        onRefresh: () async {
+          ref.invalidate(latestTakesProvider);
+          ref.invalidate(creatorsProvider);
+          ref.invalidate(featuredSkipProvider);
+          // Swallow individual failures — pull-to-refresh should never
+          // throw into the gesture. Wait for all three so the spinner
+          // lingers while the network actually settles.
+          await Future.wait([
+            ref.read(latestTakesProvider.future).catchError((_) => <CreatorTake>[]),
+            ref.read(creatorsProvider.future).catchError((_) => <Creator>[]),
+            ref.read(featuredSkipProvider.future).catchError((_) => null),
+          ]);
+        },
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+          children: [
           Row(
             children: [
               Expanded(
@@ -103,7 +127,8 @@ class CreatorsScreen extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _TakeCard(take: take),
               ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -163,8 +188,20 @@ class _Avatar extends StatelessWidget {
   }
 }
 
-/// Avatar that automatically shows the real profile photo when the creator
-/// is the currently logged-in user, falling back to colored initials otherwise.
+/// Avatar that shows the real profile photo regardless of which user is
+/// viewing it. Resolution order:
+///   1. If this is the currently logged-in user → read local
+///      [userProfileProvider.avatarKey] (instant, no round-trip).
+///   2. Otherwise, look up [publicProfileByIdProvider] for the creator's
+///      `userId` and render that avatar_key when it exists. The view is
+///      security-definer so it's readable cross-user post the 2026-04-09
+///      RLS checkpoint without widening `profiles` itself.
+///   3. Fall back to initials if neither resolves (curated creators with
+///      no `userId`, brand-new users who haven't set an avatar, or when
+///      public_profiles lookup fails — all treated as "render initials").
+///
+/// Build 16 — was previously scoped to isMe only, which made other users'
+/// pet avatars silently render as colored-initials bubbles.
 class _SmartAvatar extends StatelessWidget {
   final WidgetRef ref;
   final Creator creator;
@@ -179,15 +216,32 @@ class _SmartAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final currentCreator = ref.watch(currentCreatorProvider).valueOrNull;
     final isMe = currentCreator?.id == creator.id;
-    final profile = isMe ? ref.watch(userProfileProvider) : null;
 
-    if (isMe && profile != null) {
+    if (isMe) {
+      final profile = ref.watch(userProfileProvider);
       return UserAvatar(
         avatarKey: profile.avatarKey,
         seed: creator.alias,
         size: size,
         withBorder: false,
       );
+    }
+
+    // Cross-user: try to resolve via public_profiles when we have a
+    // user_id. `avatar_key` values like `file:/...` are device-local and
+    // will gracefully degrade to initials inside UserAvatar.
+    final uid = creator.userId;
+    if (uid != null) {
+      final publicAsync = ref.watch(publicProfileByIdProvider(uid));
+      final pp = publicAsync.valueOrNull;
+      if (pp?.avatarKey != null) {
+        return UserAvatar(
+          avatarKey: pp!.avatarKey,
+          seed: creator.alias,
+          size: size,
+          withBorder: false,
+        );
+      }
     }
     return _Avatar(alias: creator.alias, size: size);
   }
@@ -298,7 +352,9 @@ class _FeaturedSkipCard extends ConsumerWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      take.body,
+                      take.localizedBody(
+                        ref.watch(uiLocaleProvider)?.languageCode,
+                      ),
                       style: const TextStyle(fontSize: 13, height: 1.35),
                       maxLines: 4,
                       overflow: TextOverflow.ellipsis,
@@ -528,9 +584,11 @@ class _TakeCard extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 12),
-          // Body
+          // Body — Build 16 locale-aware. Falls back through the chain
+          // bodyEs → bodyEn → body when the active locale's column hasn't
+          // been populated yet (e.g. Edge Function still mid-flight).
           Text(
-            take.body,
+            take.localizedBody(ref.watch(uiLocaleProvider)?.languageCode),
             style: const TextStyle(fontSize: 13.5, height: 1.4),
           ),
           const SizedBox(height: 12),

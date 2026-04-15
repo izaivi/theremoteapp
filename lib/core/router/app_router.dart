@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/models/user_profile.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/user_profile_repository.dart';
+import '../../l10n/app_localizations.dart';
 import '../../presentation/screens/auth/auth_screen.dart';
 import '../../presentation/screens/auth/otp_verify_screen.dart';
 import '../../presentation/screens/chat/chat_screen.dart';
@@ -14,9 +15,11 @@ import '../../presentation/screens/creators/creator_detail_screen.dart';
 import '../../presentation/screens/creators/creators_screen.dart';
 import '../../presentation/screens/discover/discover_screen.dart';
 import '../../presentation/screens/home/home_screen.dart';
+import '../../presentation/screens/legal/legal_viewer_screen.dart';
 import '../../presentation/screens/long_quiz/long_quiz_screen.dart';
 import '../../presentation/screens/onboarding/onboarding_screen.dart';
 import '../../presentation/screens/profile/profile_screen.dart';
+import '../../presentation/screens/settings/blocked_creators_screen.dart';
 import '../../presentation/screens/splash/splash_screen.dart';
 import '../../presentation/screens/vault/vault_screen.dart';
 import '../../presentation/widgets/main_scaffold.dart';
@@ -103,8 +106,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Signed in but quiz not done → quiz is mandatory before catalog.
       if (!done && !atOnboarding) return '/onboarding';
 
-      // Quiz already done and somehow back on /onboarding → home.
-      if (done && atOnboarding) return '/home';
+      // Quiz already done and somehow back on /onboarding → home,
+      // UNLESS the user explicitly entered retake mode from Settings
+      // (Fase 3 "Change my preferences"). The retake flag is a query
+      // param on the URL so it survives deep-linking and doesn't need
+      // global state. See Profile → "Taste profile" section.
+      final isRetake = state.uri.queryParameters['retake'] == '1';
+      if (done && atOnboarding && !isRetake) return '/home';
 
       return null;
     },
@@ -151,6 +159,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings',
         builder: (_, __) => const ProfileScreen(),
+        routes: [
+          // Build 16 — Apple UGC compliance. Lists the user's blocked
+          // creators with an Unblock action per row.
+          GoRoute(
+            path: 'blocked',
+            builder: (_, __) => const BlockedCreatorsScreen(),
+          ),
+        ],
       ),
       GoRoute(
         path: '/auth',
@@ -180,6 +196,32 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/long-quiz',
         builder: (_, __) => const LongQuizScreen(),
+      ),
+      // Legal — Build 16 / Apple UGC compliance. `/legal/:doc` where
+      // :doc is 'terms' or 'guidelines'. Privacy is a direct URL launch
+      // (no route, handled inline at the call-site).
+      GoRoute(
+        path: '/legal/:doc',
+        builder: (context, state) {
+          final doc = state.pathParameters['doc'];
+          final l10n = AppLocalizations.of(context)!;
+          switch (doc) {
+            case 'terms':
+              return LegalViewerScreen(
+                assetPath: LegalDocs.termsAsset,
+                title: l10n.legalTermsTitle,
+                webUrl: LegalDocs.termsWebUrl,
+              );
+            case 'guidelines':
+              return LegalViewerScreen(
+                assetPath: LegalDocs.guidelinesAsset,
+                title: l10n.legalGuidelinesTitle,
+                webUrl: LegalDocs.guidelinesWebUrl,
+              );
+            default:
+              return const _RouterErrorScreen();
+          }
+        },
       ),
     ],
   );

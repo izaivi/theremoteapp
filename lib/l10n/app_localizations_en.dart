@@ -762,6 +762,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get genreAnimation => 'Animation';
 
   @override
+  String get genreAnime => 'Anime';
+
+  @override
   String get genreCrime => 'Crime';
 
   @override
@@ -848,4 +851,142 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get contentNotForMe => 'Not for me';
+
+  @override
+  String get legalTermsTitle => 'Terms of Service';
+
+  @override
+  String get legalGuidelinesTitle => 'Community Guidelines';
+
+  @override
+  String get legalLoadError => 'Couldn\'t load this document.';
+
+  @override
+  String get legalOpenOnWeb => 'Open on web';
+
+  @override
+  String get profileCommunityGuidelines => 'Community Guidelines';
+
+  @override
+  String get profileBlockedCreators => 'Blocked creators';
+
+  @override
+  String authLegalBlurb(String terms, String guidelines) {
+    return 'By continuing, you agree to our $terms and $guidelines.';
+  }
+
+  @override
+  String get authTermsLink => 'Terms of Service';
+
+  @override
+  String get authGuidelinesLink => 'Community Guidelines';
+
+  @override
+  String get reportAction => 'Report';
+
+  @override
+  String get reportSheetTitle => 'What\'s wrong with this?';
+
+  @override
+  String get reportSheetSubtitle => 'We\'ll review within 24 hours.';
+
+  @override
+  String get reportReasonSpam => 'Spam';
+
+  @override
+  String get reportReasonHarassment => 'Harassment or bullying';
+
+  @override
+  String get reportReasonHate => 'Hate speech';
+
+  @override
+  String get reportReasonOther => 'Other';
+
+  @override
+  String get reportNoteLabel => 'Tell us more (optional)';
+
+  @override
+  String get reportNoteRequiredLabel => 'Describe what\'s wrong';
+
+  @override
+  String get reportNoteRequiredError => 'Please describe the issue';
+
+  @override
+  String get reportSubmit => 'Submit report';
+
+  @override
+  String get reportSuccess => 'Report submitted. Our team will review it.';
+
+  @override
+  String get reportDuplicate => 'You\'ve already reported this.';
+
+  @override
+  String get reportError => 'Couldn\'t submit report. Please try again.';
+
+  @override
+  String get blockAction => 'Block';
+
+  @override
+  String get blockedState => 'Blocked';
+
+  @override
+  String get unblockAction => 'Unblock';
+
+  @override
+  String blockConfirmTitle(String alias) {
+    return 'Block $alias?';
+  }
+
+  @override
+  String get blockConfirmBody =>
+      'You won\'t see their takes or profile. They won\'t be notified.';
+
+  @override
+  String get blockConfirmCta => 'Block';
+
+  @override
+  String get blockedCreatorsTitle => 'Blocked creators';
+
+  @override
+  String get blockedCreatorsEmpty => 'You haven\'t blocked anyone.';
+
+  @override
+  String get blockedCreatorsHelp =>
+      'Unblock to start seeing their content again.';
+
+  @override
+  String get guidelinesSheetTitle => 'Community Guidelines';
+
+  @override
+  String get guidelinesSheetSubtitle =>
+      'Before posting, please agree to keep Flixscope a good place for everyone.';
+
+  @override
+  String get guidelinesRuleHarassment =>
+      'No harassment, threats, or hate speech.';
+
+  @override
+  String get guidelinesRuleObjectionable =>
+      'No sexual, violent, or otherwise objectionable content.';
+
+  @override
+  String get guidelinesRuleSpam =>
+      'No spam, scams, or links to malicious sites.';
+
+  @override
+  String get guidelinesRuleImpersonation =>
+      'No impersonation of other people, creators, or brands.';
+
+  @override
+  String get guidelinesRuleIp =>
+      'Respect intellectual property — quote studios, don\'t steal.';
+
+  @override
+  String get guidelinesReadFull => 'Read the full Community Guidelines →';
+
+  @override
+  String get guidelinesCancel => 'Cancel';
+
+  @override
+  String get guidelinesAccept => 'I Accept';
 }

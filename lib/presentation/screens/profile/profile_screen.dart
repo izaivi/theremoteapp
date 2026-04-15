@@ -13,11 +13,14 @@ import '../../../core/prefs/language_prefs.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/user_profile.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../data/repositories/blocks_repository.dart';
+import '../../../data/repositories/community_guidelines_repository.dart';
 import '../../../data/repositories/supabase_sync.dart';
 import '../../../data/repositories/user_profile_repository.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../widgets/paywall_sheet.dart';
 import '../../widgets/user_avatar.dart';
+import '../legal/legal_viewer_screen.dart' show LegalDocs;
 
 /// Profile / Settings screen.
 ///
@@ -140,6 +143,29 @@ class ProfileScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
 
+          // ═══════════════ Taste profile (retake quizzes) ═══════════════
+          // Fase 3 — "Change my preferences". The Fast Quiz is always
+          // retakeable; the Long Quiz tile only shows when the user has
+          // actually completed Long, so first-timers still discover it
+          // through the ProfileStrengthCard above (the natural path).
+          _SectionHeader('Taste profile'),
+          _Group(children: [
+            _Row(
+              icon: Icons.tune,
+              title: 'Retake Fast Quiz',
+              subtitle: 'Country, platforms, and genres',
+              onTap: () => context.push('/onboarding?retake=1'),
+            ),
+            if (profile.quizCompletion == QuizCompletion.long)
+              _Row(
+                icon: Icons.movie_filter_outlined,
+                title: 'Retake Long Quiz',
+                subtitle: 'Seen / loved grid and themes',
+                onTap: () => context.push('/long-quiz?retake=1'),
+              ),
+          ]),
+          const SizedBox(height: 24),
+
           // ═══════════════ Profile ═══════════════
           _SectionHeader(l10n.profileSectionProfile),
           _Group(children: [
@@ -227,6 +253,15 @@ class ProfileScreen extends ConsumerWidget {
                 _Opt('XX', l10n.countryOther),
               ],
               onChanged: langCtrl.setCountry,
+            ),
+            // Build 16 — Apple UGC compliance. Discoverable entry point
+            // to the blocked-creators list. Only makes sense when signed
+            // in (blocks live in the user's own auth scope), but the
+            // screen itself handles the signed-out case gracefully.
+            _Row(
+              icon: Icons.block,
+              title: l10n.profileBlockedCreators,
+              onTap: () => context.push('/settings/blocked'),
             ),
           ]),
           const SizedBox(height: 24),
@@ -335,15 +370,30 @@ class ProfileScreen extends ConsumerWidget {
           // ═══════════════ About ═══════════════
           _SectionHeader(l10n.profileSectionAbout),
           _Group(children: [
+            // Build 16 — wired to real legal viewer (asset markdown) instead
+            // of `comingSoon`. Apple UGC compliance requires Terms +
+            // Community Guidelines accessible in-app. Privacy Policy lives
+            // on the web because that version is canonical and changes more
+            // often than the in-repo docs.
             _Row(
               icon: Icons.description_outlined,
               title: l10n.profileTerms,
-              onTap: comingSoon,
+              onTap: () => context.push('/legal/terms'),
+            ),
+            _Row(
+              icon: Icons.rule,
+              title: l10n.profileCommunityGuidelines,
+              onTap: () => context.push('/legal/guidelines'),
             ),
             _Row(
               icon: Icons.privacy_tip_outlined,
               title: l10n.profilePrivacy,
-              onTap: comingSoon,
+              onTap: () async {
+                final uri = Uri.parse(LegalDocs.privacyWebUrl);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
             ),
             _Row(
               icon: Icons.code,
@@ -391,6 +441,14 @@ class ProfileScreen extends ConsumerWidget {
                   if (ok == true) {
                     await ref.read(authRepositoryProvider).signOut();
                     await ref.read(userProfileProvider.notifier).reset();
+                    // Build 16 — wipe in-memory blocks so the next user
+                    // that signs in on this device doesn't inherit the
+                    // previous session's block set. Server-side state is
+                    // untouched; `blocksProvider` will reload on sign-in.
+                    ref.read(blocksProvider.notifier).clearLocal();
+                    ref
+                        .read(communityGuidelinesAcceptedProvider.notifier)
+                        .clearLocal();
                     if (context.mounted) context.go('/home');
                   }
                 },
@@ -421,8 +479,37 @@ class ProfileScreen extends ConsumerWidget {
                     ],
                   ),
                 );
-                if (ok == true && context.mounted) {
-                  comingSoon(); // TODO: wire real account deletion
+                if (ok != true || !context.mounted) return;
+                // Build 16 — Apple Guideline 5.1.1(v). Calls the
+                // `delete_my_account` RPC which cascades every user-owned
+                // row and then signs out. Local Riverpod state also needs
+                // a wipe so the next account signing in on this device
+                // doesn't inherit ours.
+                try {
+                  await ref.read(authRepositoryProvider).deleteAccount();
+                  await ref.read(userProfileProvider.notifier).reset();
+                  ref.read(blocksProvider.notifier).clearLocal();
+                  ref
+                      .read(communityGuidelinesAcceptedProvider.notifier)
+                      .clearLocal();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Account deleted.'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                    context.go('/home');
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Could not delete account: $e'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
                 }
               },
             ),

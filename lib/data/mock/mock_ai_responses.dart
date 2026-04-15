@@ -2,6 +2,7 @@ import 'dart:math';
 
 import '../models/content.dart';
 import '../models/creator.dart';
+import '../models/user_profile.dart';
 
 /// Remoty Engine — rule-based streaming companion.
 ///
@@ -27,6 +28,22 @@ class RemotypEngine {
   final String? previousQuery;
   final List<String>? previousResultIds;
 
+  /// Last text Remoty itself produced. Used so a follow-up "ok / dale / yes"
+  /// can be interpreted as "act on what you just offered" — currently used
+  /// to extract a `**theme**` mentioned in a personalized greeting.
+  final String? previousReplyText;
+
+  /// User taste profile — drives greeting personalization, platform
+  /// pre-filtering, sessionLength caps, and genre tiebreaker weighting.
+  /// Null while anonymous / pre-onboarding (engine falls back to neutral).
+  final UserProfile? userProfile;
+
+  /// Engaged content IDs (watchedIds ∪ dismissedIds ∪ ratings.keys).
+  /// Same contract as Home rows + Discover idle (Fase 3.1).
+  /// Only applied to *recommendation* intents — explicit title/director/cast
+  /// searches bypass it so the user can always look something up by name.
+  final Set<String> excluded;
+
   const RemotypEngine({
     required this.catalog,
     this.lovedIds = const {},
@@ -36,6 +53,9 @@ class RemotypEngine {
     this.ratings = const {},
     this.previousQuery,
     this.previousResultIds,
+    this.previousReplyText,
+    this.userProfile,
+    this.excluded = const {},
   });
 
   // ── Random fallback messages (witty, no-judgment Remoty vibe) ──
@@ -86,6 +106,105 @@ class RemotypEngine {
 
   static String _randomFrom(List<String> list) => list[_rng.nextInt(list.length)];
 
+  /// Personalized greeting (Fase 4 — "cálido pero discreto").
+  ///
+  /// Picks a base greeting from the bilingual pool, then optionally:
+  ///   - prefixes the user's [alias] when present (~70% of the time)
+  ///   - tags on a one-liner referencing a [favoriteThemes] entry (~50%)
+  ///
+  /// Falls back to the plain pool when [userProfile] is null/anonymous so
+  /// brand-new users still see the canonical Remoty intro.
+  String _personalizedGreeting(bool spanish) {
+    final base = spanish ? _randomFrom(_greetingsEs) : _randomFrom(_greetingsEn);
+    final p = userProfile;
+    if (p == null) return base;
+
+    final alias = p.alias?.trim();
+    final hasAlias = alias != null && alias.isNotEmpty;
+
+    // Alias prefix ~70% of the time (when we have one).
+    // We don't try to splice the alias inside the canned phrase — too fragile
+    // across languages. Instead we prepend a short personalized opener and
+    // keep the original greeting on the next line.
+    String greeting = base;
+    if (hasAlias && _rng.nextInt(10) < 7) {
+      final opener = spanish ? '¡Hey, $alias!' : 'Hey, $alias!';
+      greeting = '$opener $base';
+    }
+
+    // Theme/director/actor mention ~50% of the time.
+    final themes = p.favoriteThemes;
+    if (themes.isNotEmpty && _rng.nextBool()) {
+      final theme = themes[_rng.nextInt(themes.length)];
+      greeting += spanish
+          ? '\n\nVi en tu perfil que te late **$theme** — si quieres, jalo por ahí.'
+          : '\n\nNoticed **$theme** on your profile — happy to lean that way if you want.';
+    }
+
+    return greeting;
+  }
+
+  /// Single-token affirmations that mean "yes, do that" in the context of
+  /// the previous Remoty reply. Kept narrow on purpose — anything ambiguous
+  /// (like "sure" alone, which can be sarcasm) we leave to generic search.
+  static final RegExp _affirmationRe = RegExp(
+    r'^(ok|okay|okey|sí|si|yes|yep|yeah|dale|vale|porfa|porfi|please|pls|claro|listo|go|adelante)[!.\s]*$',
+    caseSensitive: false,
+  );
+
+  static bool _isAffirmation(String q) => _affirmationRe.hasMatch(q.trim());
+
+  /// Handle a contextual "ok / dale / yes" — the user is accepting whatever
+  /// Remoty offered in the previous reply.
+  ///
+  /// Strategy:
+  ///   1. Look for a `**bolded**` token in the previous reply (themes are
+  ///      always rendered bold by `_personalizedGreeting`). If found, search
+  ///      the catalog for that token across title/director/cast/genre.
+  ///   2. Fall back to the personalized top pool so the user always gets
+  ///      *something* actionable.
+  ({String text, List<String> contentIds}) _handleAffirmation({
+    required bool spanish,
+  }) {
+    final prev = previousReplyText ?? '';
+    final boldMatch = RegExp(r'\*\*([^*]+)\*\*').firstMatch(prev);
+    final cue = boldMatch?.group(1)?.trim();
+
+    if (cue != null && cue.isNotEmpty) {
+      final cl = cue.toLowerCase();
+      final hits = catalog.where((c) {
+        final t = c.title.toLowerCase();
+        final d = c.director?.toLowerCase() ?? '';
+        final castHit = c.cast.any((a) => a.toLowerCase().contains(cl));
+        final genreHit = c.genres.any((g) => g.toLowerCase().contains(cl));
+        return t.contains(cl) || d.contains(cl) || castHit || genreHit;
+      }).toList()
+        ..sort((a, b) => b.watcherScore.compareTo(a.watcherScore));
+
+      if (hits.isNotEmpty) {
+        return _respond(
+          pool: hits,
+          intro: spanish
+              ? 'Perfecto, jalando por **$cue**:'
+              : 'Got it, leaning into **$cue**:',
+          spanish: spanish,
+          shuffle: false,
+          // Don't hide engaged titles — the user explicitly asked for this thread.
+          respectExclusion: false,
+        );
+      }
+    }
+
+    // Nothing to lean into → personalized top picks.
+    return _respond(
+      pool: _personalizedTopPool(),
+      intro: spanish
+          ? 'Va. Esto es lo que más vale la pena ahora:'
+          : 'Cool. Here\'s what\'s most worth your time right now:',
+      spanish: spanish,
+    );
+  }
+
   /// Entry point. Returns response text + optional content IDs for cards.
   ({String text, List<String> contentIds}) reply(
     String userMessage, {
@@ -107,7 +226,7 @@ class RemotypEngine {
     switch (intent) {
       case _Intent.greeting:
         return (
-          text: spanish ? _randomFrom(_greetingsEs) : _randomFrom(_greetingsEn),
+          text: _personalizedGreeting(spanish),
           contentIds: const [],
         );
 
@@ -118,6 +237,9 @@ class RemotypEngine {
               : 'You\'re welcome! If you need more picks, I\'m right here.',
           contentIds: const [],
         );
+
+      case _Intent.affirmation:
+        return _handleAffirmation(spanish: spanish);
 
       case _Intent.skip:
         final pool = catalog.where((c) => c.watcherScore < 65).toList();
@@ -130,15 +252,23 @@ class RemotypEngine {
         );
 
       case _Intent.short:
+        // Cap depends on the user's preferred sessionLength bucket so a
+        // "long-binge" person doesn't get force-fed 90-minute fillers when
+        // they ask for "something tonight".
+        final cap = switch (userProfile?.sessionLength ?? SessionLength.medium) {
+          SessionLength.short => 95,
+          SessionLength.medium => 120,
+          SessionLength.long => 150,
+        };
         final pool = catalog
             .where((c) =>
                 c.type == ContentType.movie &&
                 c.durationMinutes > 0 &&
-                c.durationMinutes <= 100 &&
+                c.durationMinutes <= cap &&
                 c.watcherScore >= 80)
             .toList();
         return _respond(
-          pool: pool,
+          pool: _weightByFavoriteGenres(pool),
           intro: spanish
               ? 'Corto, de calidad, listo para esta noche:'
               : 'Short, high-quality, ready for tonight:',
@@ -151,7 +281,7 @@ class RemotypEngine {
                 (c) => c.type == ContentType.series && c.watcherScore >= 80)
             .toList();
         return _respond(
-          pool: pool,
+          pool: _weightByFavoriteGenres(pool),
           intro: spanish
               ? 'Estas son las series que valen tu fin de semana:'
               : 'These are the series worth your weekend:',
@@ -281,15 +411,34 @@ class RemotypEngine {
         );
 
       case _Intent.animation:
-        final pool = catalog
+        // Si el usuario dijo "anime" / "ghibli" / "manga" / "shonen",
+        // aplicamos filtro estricto: Animation + original_language = 'ja'.
+        // Esto evita servir Pixar/DreamWorks cuando piden específicamente anime.
+        // Si la cosecha queda vacía (catalog sin anime ingestado), caemos al
+        // filtro amplio para no devolver "nada" al usuario.
+        final isAnimeAsk = _any(
+          q,
+          ['anime', 'ghibli', 'manga', 'shonen', 'shounen', 'otaku'],
+        );
+        final broadPool = catalog
             .where((c) => c.genres
                 .any((g) => g.toLowerCase().contains('animat')))
             .toList();
+        final strictPool = isAnimeAsk
+            ? broadPool
+                .where((c) => c.originalLanguage == 'ja')
+                .toList()
+            : const <Content>[];
+        final pool = (isAnimeAsk && strictPool.isNotEmpty)
+            ? strictPool
+            : broadPool;
         return _respond(
           pool: pool,
-          intro: spanish
-              ? 'Animación que vale la pena:'
-              : 'Animation worth watching:',
+          intro: isAnimeAsk
+              ? (spanish ? 'Anime para maratonear:' : 'Anime worth bingeing:')
+              : (spanish
+                  ? 'Animación que vale la pena:'
+                  : 'Animation worth watching:'),
           spanish: spanish,
         );
 
@@ -298,6 +447,9 @@ class RemotypEngine {
 
       case _Intent.ranking:
         return _handleRanking(q, spanish: spanish);
+
+      case _Intent.byScore:
+        return _handleByScore(q, spanish: spanish);
 
       case _Intent.creators:
         return _handleCreators(spanish: spanish);
@@ -612,6 +764,29 @@ class RemotypEngine {
     required bool spanish,
   }) {
     final platform = _extractPlatform(q);
+    final activePlatforms = userProfile?.activePlatforms ?? const <String>[];
+
+    // Generic "what's on streaming?" with no named platform → prefer the
+    // user's active subscriptions so we don't surface stuff they can't watch.
+    if (platform == 'streaming' && activePlatforms.isNotEmpty) {
+      final pool = catalog
+          .where((c) => c.availablePlatforms.any((p) {
+                final pl = p.toLowerCase();
+                return activePlatforms
+                    .any((ap) => pl.contains(ap.toLowerCase()));
+              }))
+          .where((c) => c.watcherScore >= 75)
+          .toList()
+        ..sort((a, b) => b.watcherScore.compareTo(a.watcherScore));
+      return _respond(
+        pool: _weightByFavoriteGenres(pool),
+        intro: spanish
+            ? 'Lo mejor en tus plataformas (${activePlatforms.join(', ')}):'
+            : 'Best on your platforms (${activePlatforms.join(', ')}):',
+        spanish: spanish,
+      );
+    }
+
     final pool = catalog
         .where((c) => c.availablePlatforms
             .any((p) => p.toLowerCase().contains(platform.toLowerCase())))
@@ -619,11 +794,18 @@ class RemotypEngine {
         .toList()
       ..sort((a, b) => b.watcherScore.compareTo(a.watcherScore));
 
+    // Heads-up if the named platform isn't one the user actually pays for.
+    final userHasIt = activePlatforms
+        .any((ap) => ap.toLowerCase() == platform.toLowerCase());
+    final heads = (activePlatforms.isNotEmpty && !userHasIt)
+        ? (spanish
+            ? '_Heads-up: no veo **$platform** en tu lista de plataformas activas — quizá necesites suscribirte._\n\n'
+            : '_Heads-up: I don\'t see **$platform** on your active platforms — you may need a subscription._\n\n')
+        : '';
+
     return _respond(
-      pool: pool,
-      intro: spanish
-          ? 'Lo mejor disponible en **$platform**:'
-          : 'Best available on **$platform**:',
+      pool: _weightByFavoriteGenres(pool),
+      intro: '$heads${spanish ? 'Lo mejor disponible en **$platform**:' : 'Best available on **$platform**:'}',
       spanish: spanish,
       emptyMsg: spanish
           ? 'No encontré contenido de **$platform** en el catálogo actual. '
@@ -641,14 +823,22 @@ class RemotypEngine {
     String q, {
     required bool spanish,
   }) {
-    // Normalize query: lowercase, remove common filler words
+    // Normalize query: lowercase, remove common filler words / phrases.
+    // Order matters: strip multi-word phrases BEFORE single tokens so we
+    // don't leave orphan stop-words behind ("what" without "about", etc).
     final query = q
-        .replaceAll(RegExp(r'\b(busca|buscar|find|search|show|dame|quiero ver|want to watch|recommend|recomienda)\b'), '')
+        .replaceAll(
+            RegExp(
+                r'\b(que hay de|qu[eé] hay de|que tienes de|qu[eé] tienes de|what about|what is|what\u0027s|whats|who is|who\u0027s|tell me about|h[aá]blame de|conoces a|sabes de)\b'),
+            '')
+        .replaceAll(
+            RegExp(
+                r'\b(busca|buscar|find|search|show|dame|quiero ver|want to watch|recommend|recomienda)\b'),
+            '')
         .trim();
 
     if (query.isEmpty) {
-      final pool = [...catalog]
-        ..sort((a, b) => b.watcherScore.compareTo(a.watcherScore));
+      final pool = _personalizedTopPool();
       return _respond(
         pool: pool,
         intro: spanish
@@ -673,6 +863,8 @@ class RemotypEngine {
       });
 
     if (titleMatches.isNotEmpty) {
+      // Explicit name lookup → never hide engaged titles. If Vivi rated FROM
+      // 5★ and then asks "FROM" by name, she still wants FROM in the answer.
       return _respond(
         pool: titleMatches,
         intro: spanish
@@ -680,6 +872,7 @@ class RemotypEngine {
             : 'Found this in the catalog:',
         spanish: spanish,
         shuffle: false,
+        respectExclusion: false,
       );
     }
 
@@ -698,6 +891,7 @@ class RemotypEngine {
             : 'Films by **$dirName** in the catalog:',
         spanish: spanish,
         shuffle: false,
+        respectExclusion: false,
       );
     }
 
@@ -718,39 +912,99 @@ class RemotypEngine {
             : 'Titles with **$actorName**:',
         spanish: spanish,
         shuffle: false,
+        respectExclusion: false,
       );
     }
 
     // 4. Word-level fuzzy: match if ANY significant word (3+ chars) in the
-    //    query appears in the title. Catches partial title searches.
+    //    query appears in title, director, or cast. Catches partial searches
+    //    like "Que hay de Nolan" → Nolan is a director surname, not a title.
     final words = ql.split(RegExp(r'\s+')).where((w) => w.length >= 3).toList();
     if (words.isNotEmpty) {
       final fuzzyMatches = catalog.where((c) {
         final tl = c.title.toLowerCase();
-        return words.any((w) => tl.contains(w));
+        final dl = c.director?.toLowerCase() ?? '';
+        return words.any((w) {
+          if (tl.contains(w) || dl.contains(w)) return true;
+          return c.cast.any((a) => a.toLowerCase().contains(w));
+        });
       }).toList()
         ..sort((a, b) => b.watcherScore.compareTo(a.watcherScore));
 
       if (fuzzyMatches.isNotEmpty) {
+        // Title-only matches keep the "this might interest you" intro;
+        // anything else (director/cast) is a stronger signal — say so.
+        final isPersonHit = fuzzyMatches.any((c) => words.any((w) {
+              final tl = c.title.toLowerCase();
+              if (tl.contains(w)) return false;
+              final dl = c.director?.toLowerCase() ?? '';
+              return dl.contains(w) ||
+                  c.cast.any((a) => a.toLowerCase().contains(w));
+            }));
         return _respond(
           pool: fuzzyMatches,
-          intro: spanish
-              ? 'No encontré una coincidencia exacta, pero esto podría interesarte:'
-              : 'No exact match, but this might interest you:',
+          intro: isPersonHit
+              ? (spanish
+                  ? 'Encontré títulos relacionados a ${words.last}:'
+                  : 'Found titles related to ${words.last}:')
+              : (spanish
+                  ? 'No encontré una coincidencia exacta, pero esto podría interesarte:'
+                  : 'No exact match, but this might interest you:'),
           spanish: spanish,
+          shuffle: false,
+          // Person/director/cast lookups are explicit — don't hide engaged.
+          respectExclusion: !isPersonHit,
         );
       }
     }
 
-    // 5. Nothing found — witty random fallback + trending picks
-    final pool = [...catalog]
-      ..sort((a, b) => b.watcherScore.compareTo(a.watcherScore));
+    // 5. Nothing found — witty random fallback + personalized trending picks
+    final pool = _personalizedTopPool();
     final fallback = spanish ? _randomFrom(_fallbacksEs) : _randomFrom(_fallbacksEn);
     return _respond(
       pool: pool,
       intro: fallback,
       spanish: spanish,
     );
+  }
+
+  /// "Top of catalog" tilted toward the user's favoriteGenres and
+  /// activePlatforms. Used when the user asks something open-ended (or when
+  /// search misses) so we don't dump the same generic top-N every time.
+  ///
+  /// Anonymous users get the plain watcherScore-sorted catalog.
+  List<Content> _personalizedTopPool() {
+    final p = userProfile;
+    final base = [...catalog]
+      ..sort((a, b) => b.watcherScore.compareTo(a.watcherScore));
+    if (p == null) return base;
+
+    final favsLower = p.favoriteGenres.map((g) => g.toLowerCase()).toSet();
+    final platsLower =
+        p.activePlatforms.map((plat) => plat.toLowerCase()).toSet();
+
+    if (favsLower.isEmpty && platsLower.isEmpty) return base;
+
+    bool platformOk(Content c) {
+      if (platsLower.isEmpty) return true;
+      return c.availablePlatforms.any((ap) {
+        final apl = ap.toLowerCase();
+        return platsLower.any((up) => apl.contains(up));
+      });
+    }
+
+    bool genreOk(Content c) {
+      if (favsLower.isEmpty) return true;
+      return c.genres.any((g) {
+        final gl = g.toLowerCase();
+        return favsLower.any((f) => gl.contains(f) || f.contains(gl));
+      });
+    }
+
+    final hits = base.where((c) => platformOk(c) && genreOk(c)).toList();
+    // Backfill with the rest of the catalog so we always have ≥ 3 candidates.
+    final remainder = base.where((c) => !hits.contains(c)).toList();
+    return [...hits, ...remainder];
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -825,7 +1079,113 @@ class RemotypEngine {
 
   // ── Intent classification ──
 
+  // ── Watcher Score detection ──
+  //
+  // Fires when the user references the Watcher Score visible in every result
+  // card. Catches three shapes:
+  //   1. Explicit name: "watcher score", "puntaje", "puntuación"
+  //   2. "score" word (en/es): "score alto", "score 80", "score superior"
+  //   3. Numeric thresholds with comparators: "más de 80", "above 75", etc.
+  //      (kept narrow to 2-digit numbers so "5 stars" doesn't false-positive)
+  static final RegExp _byScoreRe = RegExp(
+    r'(watcher score|puntaje|puntuaci[oó]n|\bscore\b|'
+    r'(?:m[aá]s de|arriba de|encima de|superior a|mayor (?:a|que)|'
+    r'above|over|higher than|greater than)\s*\d{2,3})',
+    caseSensitive: false,
+  );
+
+  static bool _isByScoreQuery(String q) => _byScoreRe.hasMatch(q);
+
+  /// Parse a threshold from the query.
+  ///
+  /// Heuristics:
+  ///   - Numeric token in 50-99 → use as-is (Watcher Score is /100)
+  ///   - Numeric token in 1-10 (with comma/dot decimals) → IMDb-style /10,
+  ///     multiply ×10 (so "score arriba de 8" → 80)
+  ///   - "alto" / "high" / "highest" / "top" → 80 (or 85 for "muy alto")
+  ///   - Nothing parseable → 80 (default for "watcher score" alone)
+  ///
+  /// Returns null only when the user explicitly wants "low" titles, so the
+  /// caller can route to a different copy.
+  int? _parseScoreThreshold(String q) {
+    // Low-score signal — mirrors the `skip` intent territory; we still answer
+    // here because the user explicitly asked about score.
+    if (_any(q, ['bajo', 'low', 'malo', 'peor', 'worst'])) return -1;
+
+    // Number + optional decimal.
+    final numMatch = RegExp(r'\b(\d{1,3})(?:[.,](\d+))?\b').firstMatch(q);
+    if (numMatch != null) {
+      final whole = int.tryParse(numMatch.group(1)!) ?? 80;
+      if (whole >= 50 && whole <= 100) return whole.clamp(50, 100);
+      if (whole >= 1 && whole <= 10) {
+        // Treat 8.5 → 85, 9 → 90, 7 → 70, etc.
+        final dec = numMatch.group(2);
+        if (dec != null && dec.isNotEmpty) {
+          final asDouble = double.tryParse('$whole.$dec') ?? whole.toDouble();
+          return (asDouble * 10).round().clamp(50, 100);
+        }
+        return (whole * 10).clamp(50, 100);
+      }
+    }
+
+    if (_any(q, ['muy alto', 'altísimo', 'altisimo', 'highest', 'top tier'])) {
+      return 85;
+    }
+    return 80;
+  }
+
+  ({String text, List<String> contentIds}) _handleByScore(
+    String q, {
+    required bool spanish,
+  }) {
+    final threshold = _parseScoreThreshold(q);
+
+    // Low-score path — mirrors `_Intent.skip` but acknowledges the framing.
+    if (threshold == -1) {
+      final pool = catalog.where((c) => c.watcherScore < 65).toList()
+        ..sort((a, b) => a.watcherScore.compareTo(b.watcherScore));
+      return _respond(
+        pool: pool,
+        intro: spanish
+            ? 'Estos tienen Watcher Score bajo — probablemente puedes saltarlos:'
+            : 'These have a low Watcher Score — you can probably skip them:',
+        spanish: spanish,
+        shuffle: false,
+      );
+    }
+
+    final cutoff = threshold ?? 80;
+    final pool = catalog.where((c) => c.watcherScore >= cutoff).toList()
+      ..sort((a, b) => b.watcherScore.compareTo(a.watcherScore));
+
+    if (pool.isEmpty) {
+      return (
+        text: spanish
+            ? 'No tengo títulos con Watcher Score $cutoff o mayor en tu catálogo. Prueba bajando un poco el umbral.'
+            : 'I don\'t have any titles with a Watcher Score of $cutoff or higher in your catalog. Try lowering the bar a bit.',
+        contentIds: const [],
+      );
+    }
+
+    return _respond(
+      pool: pool,
+      intro: spanish
+          ? 'Top picks por Watcher Score (≥$cutoff):'
+          : 'Top picks by Watcher Score (≥$cutoff):',
+      spanish: spanish,
+      shuffle: false, // already sorted desc by score
+    );
+  }
+
   _Intent _detectIntent(String q) {
+    // Watcher Score queries — score is visible in every result card so users
+    // naturally ask "score arriba de 80" or "watcher score alto". Catch this
+    // BEFORE refine so "con score 80" doesn't get treated as a refinement of
+    // the previous reply (the word "con" would otherwise hijack it).
+    if (_isByScoreQuery(q)) {
+      return _Intent.byScore;
+    }
+
     // Check for refinement of previous query first —
     // short messages like "but with fights" or "pero de peleas" refine.
     if (previousQuery != null &&
@@ -845,6 +1205,13 @@ class RemotypEngine {
     }
     if (_any(q, ['thank', 'gracias', 'thanks', 'thx'])) {
       return _Intent.thanks;
+    }
+
+    // Affirmation — only meaningful when Remoty just offered something.
+    // We require a previousReplyText so a stray "ok" out of context still
+    // routes to the generic search instead of confusing the user.
+    if (previousReplyText != null && _isAffirmation(q)) {
+      return _Intent.affirmation;
     }
     if (_any(q, [
       'avoid', 'skip', 'overrated', 'evitar', 'saltar',
@@ -968,14 +1335,27 @@ class RemotypEngine {
 
   // ── Response builder ──
 
-  static ({String text, List<String> contentIds}) _respond({
+  ({String text, List<String> contentIds}) _respond({
     required List<Content> pool,
     required String intro,
     required bool spanish,
     String? emptyMsg,
     bool shuffle = true,
+    bool respectExclusion = true,
   }) {
-    if (pool.isEmpty) {
+    // Fase 4: hide titles the user already engaged with (watched, dismissed,
+    // rated). Same contract as Home rows + Discover idle. Skipped for
+    // explicit lookups (title/director/cast) so the user can still find
+    // something they've already rated when they search by name.
+    var working = [...pool];
+    if (respectExclusion && excluded.isNotEmpty) {
+      final filtered = working.where((c) => !excluded.contains(c.id)).toList();
+      // Don't filter to oblivion — if exclusion empties the pool, fall back
+      // to the unfiltered list so the user gets *something*.
+      if (filtered.isNotEmpty) working = filtered;
+    }
+
+    if (working.isEmpty) {
       return (
         text: emptyMsg ??
             (spanish ? _randomFrom(_fallbacksEs) : _randomFrom(_fallbacksEn)),
@@ -983,7 +1363,6 @@ class RemotypEngine {
       );
     }
 
-    final working = [...pool];
     if (shuffle) working.shuffle(_rng);
     final picks = working.take(3).toList();
     final reasonsLine = picks
@@ -997,6 +1376,28 @@ class RemotypEngine {
     );
   }
 
+  /// Reorder a candidate list so titles whose genres overlap the user's
+  /// `favoriteGenres` come first. Stable for ties: original watcherScore-driven
+  /// ordering (or shuffle) inside each tier is preserved.
+  ///
+  /// No-op when there is no profile or no favorite genres — keeps anonymous
+  /// users on the canonical curation.
+  List<Content> _weightByFavoriteGenres(List<Content> pool) {
+    final favs = userProfile?.favoriteGenres ?? const <String>[];
+    if (favs.isEmpty || pool.isEmpty) return pool;
+    final favsLower = favs.map((g) => g.toLowerCase()).toSet();
+    final boosted = <Content>[];
+    final rest = <Content>[];
+    for (final c in pool) {
+      final hit = c.genres.any((g) {
+        final gl = g.toLowerCase();
+        return favsLower.any((f) => gl.contains(f) || f.contains(gl));
+      });
+      (hit ? boosted : rest).add(c);
+    }
+    return [...boosted, ...rest];
+  }
+
   static bool _any(String text, List<String> keys) =>
       keys.any((k) => text.contains(k));
 }
@@ -1008,6 +1409,7 @@ typedef MockAiResponder = RemotypEngine;
 enum _Intent {
   greeting,
   thanks,
+  affirmation,
   skip,
   short,
   binge,
@@ -1022,6 +1424,7 @@ enum _Intent {
   animation,
   vault,
   ranking,
+  byScore,
   creators,
   platform,
   refine,

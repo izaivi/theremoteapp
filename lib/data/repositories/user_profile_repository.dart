@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/supabase/supabase_client.dart';
 import '../models/user_profile.dart';
 import 'supabase_sync.dart';
 
@@ -98,14 +101,28 @@ final userProfileRepositoryProvider =
 /// onboarding completion.
 class UserProfileController extends StateNotifier<UserProfile> {
   UserProfileController(this._repo, this._sync) : super(UserProfile.anonymous) {
+    _loadCompleter = Completer<void>();
     _load();
   }
 
   final UserProfileRepository _repo;
   final SupabaseSyncService _sync;
 
+  /// Resolves once [_load] has hydrated state from SharedPreferences.
+  ///
+  /// Used by main.dart's auth listener to avoid the cold-start race where
+  /// `AuthChangeEvent.signedIn` fires before [_load] completes — at that
+  /// moment `state.id` is still null (anonymous initial state), the
+  /// listener's "is this a different user?" check always resolves true,
+  /// and it calls [reset] which wipes SharedPreferences. Awaiting
+  /// [ensureLoaded] lets the listener compare a hydrated id against the
+  /// incoming uid, so legitimate returning sessions are recognized.
+  late Completer<void> _loadCompleter;
+  Future<void> ensureLoaded() => _loadCompleter.future;
+
   Future<void> _load() async {
     state = await _repo.load();
+    if (!_loadCompleter.isCompleted) _loadCompleter.complete();
   }
 
   /// After sign-in: pull remote profile and merge. Remote wins on conflict
@@ -143,35 +160,79 @@ class UserProfileController extends StateNotifier<UserProfile> {
     // remote doesn't have one but local does, we attempt a backfill push so
     // users who set an alias pre-auth (or pre-sync-wire) don't lose it.
     //
-    // Arrays (activePlatforms, favoriteGenres, favoriteThemes) and the
-    // session length are now canonical on remote after the Build 15 schema
-    // expansion — a cross-device user MUST receive their full quiz state
-    // from Supabase, not the local default. For watchedIds we UNION local
-    // with remote so runtime "mark as watched" actions that haven't synced
-    // yet don't get wiped by a pull.
+    // Build 16 fix — defensive merge for the "ghost row" case:
+    //
+    // The `handle_new_user` trigger inserts an empty profiles row on signup
+    // (id + is_guest only; every other column NULL/default). Until the app
+    // pushes the user's quiz answers, `pullProfile` legitimately returns a
+    // row with `quiz_completion = none`, empty platforms/genres arrays, and
+    // `session_length = medium` (the column default).
+    //
+    // The previous merge took remote values unconditionally, which meant:
+    //   - A tokenRefresh firing after 15min of idle → remote's empty
+    //     `quiz_completion = none` stomped the local `fast` → router
+    //     redirected to /onboarding and the user saw the quiz again.
+    //   - Cold start before pushProfile had ever landed a real payload
+    //     → same wipe → "Rayo McQueen" style forced re-quiz.
+    //
+    // New policy:
+    //   - quizCompletion escalates only (none < fast < long). Remote can
+    //     upgrade local but never downgrade. A cross-device user who
+    //     completed the Long Quiz elsewhere still gets it synced; the
+    //     trigger row's `none` can't poison an already-completed session.
+    //   - Arrays (platforms, genres, themes) treat empty-remote as "never
+    //     populated" and preserve local. A user who actually empties these
+    //     via a new quiz always passes through completeFastQuiz which
+    //     pushes a non-empty list, so this heuristic can't mask a genuine
+    //     clear. (They picked platforms in the quiz — it's never empty in
+    //     practice.)
+    //   - session_length, tier, alias, country, avatar keep remote-wins
+    //     fallback to local (these are scalars with real defaults that the
+    //     user can't "accidentally clear").
+    //   - watchedIds still UNION so runtime "mark watched" hasn't-synced
+    //     writes aren't wiped by a pull.
     final merged = state.copyWith(
       id: remote.id ?? state.id,
       alias: remote.alias ?? state.alias,
       country: remote.country ?? state.country,
       avatarKey: remote.avatarKey ?? state.avatarKey,
       tier: remote.tier,
-      quizCompletion: remote.quizCompletion,
-      activePlatforms: remote.activePlatforms,
-      favoriteGenres: remote.favoriteGenres,
+      quizCompletion: _mergeQuizCompletion(
+        local: state.quizCompletion,
+        remote: remote.quizCompletion,
+      ),
+      activePlatforms: remote.activePlatforms.isEmpty
+          ? state.activePlatforms
+          : remote.activePlatforms,
+      favoriteGenres: remote.favoriteGenres.isEmpty
+          ? state.favoriteGenres
+          : remote.favoriteGenres,
       sessionLength: remote.sessionLength,
-      favoriteThemes: remote.favoriteThemes,
+      favoriteThemes: remote.favoriteThemes.isEmpty
+          ? state.favoriteThemes
+          : remote.favoriteThemes,
       watchedIds: {...state.watchedIds, ...remote.watchedIds},
     );
     state = merged;
     await _repo.save(merged);
 
-    final needsBackfill = remote.alias == null && state.alias != null;
-    if (needsBackfill) {
+    // Heal-on-pull: push local when the remote has holes that we can fill.
+    //   - alias: the original case (user set alias pre-auth / pre-sync wire).
+    //   - avatarKey (Build 16): same class of bug. Two TestFlight accounts
+    //     had NULL avatar_key in `profiles` despite both users having
+    //     selected pet avatars. Result: other users saw initials instead of
+    //     the real avatar because `publicProfileByIdProvider` reads from the
+    //     view, which only shows what's persisted in `profiles`. Heal by
+    //     pushing on next refresh whenever remote is NULL and local has one.
+    final needsAliasBackfill = remote.alias == null && state.alias != null;
+    final needsAvatarBackfill =
+        remote.avatarKey == null && state.avatarKey != null;
+    if (needsAliasBackfill || needsAvatarBackfill) {
       try {
         await _sync.pushProfile(merged);
       } catch (_) {
         // Unique-violation (another user grabbed this alias first) or other
-        // transient error. Best-effort: leave the local alias as-is so the
+        // transient error. Best-effort: leave the local values as-is so the
         // user can rename and retry from Profile → Change alias.
       }
     }
@@ -201,14 +262,38 @@ class UserProfileController extends StateNotifier<UserProfile> {
     );
     state = next;
     await _repo.save(next);
-    _sync.pushProfile(next);
+    // Build 16: awaited (was fire-and-forget). The race on a fresh signup was:
+    // user finishes quiz → push scheduled → app backgrounds → tokenRefreshed
+    // fires → refreshFromRemote reads the still-empty ghost row → local
+    // state gets stomped back to quizCompletion=none and Home boots into
+    // /onboarding. Awaiting ensures the push lands before any subsequent
+    // pull can observe the row.
+    await _sync.pushProfile(next);
   }
 
   Future<void> completeLongQuiz(QuizAnswers answers) async {
     final next = state.withLongQuiz(answers);
     state = next;
     await _repo.save(next);
-    _sync.pushProfile(next);
+    // See completeFastQuiz — awaited to close the push-vs-pull race window.
+    await _sync.pushProfile(next);
+  }
+
+  /// Quiz completion is monotonic: it can only move forward (none → fast → long).
+  /// A pull from Supabase that returns `none` (e.g. the `handle_new_user`
+  /// trigger ghost row, or a transient read failure that defaulted to none)
+  /// must never downgrade a local `fast`/`long` — that was the Build 15
+  /// "forced re-quiz after idle/cold-start" bug.
+  QuizCompletion _mergeQuizCompletion({
+    required QuizCompletion local,
+    required QuizCompletion remote,
+  }) {
+    const rank = {
+      QuizCompletion.none: 0,
+      QuizCompletion.fast: 1,
+      QuizCompletion.long: 2,
+    };
+    return rank[remote]! > rank[local]! ? remote : local;
   }
 
   Future<void> markWatched(String contentId) async {
@@ -252,7 +337,18 @@ class UserProfileController extends StateNotifier<UserProfile> {
     final next = state.copyWith(avatarKey: avatarKey);
     state = next;
     await _repo.save(next);
-    _sync.pushProfile(next);
+    // Build 16 — awaited push so cross-user avatar reads
+    // (`publicProfileByIdProvider`) observe the new key as soon as the
+    // save completes. Previous fire-and-forget let the app race ahead of
+    // the insert, which was the bug pattern behind Vivi/Chitoge's DB
+    // rows having NULL avatar_key despite both having selected avatars.
+    try {
+      await _sync.pushProfile(next);
+    } catch (_) {
+      // Best-effort: never crash the settings flow on a transient sync
+      // error. The heal-on-pull logic in refreshFromRemote catches
+      // anything that didn't land here.
+    }
   }
 
   /// Update the subscription tier (`'free'` or `'pro'`).
@@ -307,3 +403,48 @@ final isProProvider = Provider<bool>((ref) {
 /// Set to `true` by creators_provider when the logged-in user has a
 /// creator profile. Defaults to false.
 final isCreatorOverride = StateProvider<bool>((ref) => false);
+
+/// Build 16 — minimal public snapshot of another user's profile.
+///
+/// Backed by the `public.public_profiles` view (security-definer, exposes
+/// only `id, alias, avatar_key`). Used to render cross-user avatars on the
+/// Creators tab and creator detail screen — prior to this, `_SmartAvatar`
+/// only rendered the real avatar for the currently-logged-in user because
+/// it read from local `userProfileProvider`. Other users' profiles showed
+/// initials even when they had a pet avatar selected.
+class PublicProfile {
+  final String id;
+  final String? alias;
+  final String? avatarKey;
+  const PublicProfile({
+    required this.id,
+    this.alias,
+    this.avatarKey,
+  });
+}
+
+/// Fetches a single user's public profile row. Returns null if the lookup
+/// fails (network, RLS, row missing). Callers fall back to initials — this
+/// provider is strictly best-effort visual enhancement; no UI state should
+/// block on it.
+final publicProfileByIdProvider =
+    FutureProvider.family<PublicProfile?, String>((ref, userId) async {
+  if (!SupabaseConfig.isConfigured) return null;
+  try {
+    final sb = Supabase.instance.client;
+    final rows = await sb
+        .from('public_profiles')
+        .select('id, alias, avatar_key')
+        .eq('id', userId)
+        .limit(1);
+    if (rows.isEmpty) return null;
+    final r = rows.first;
+    return PublicProfile(
+      id: r['id'] as String,
+      alias: r['alias'] as String?,
+      avatarKey: r['avatar_key'] as String?,
+    );
+  } catch (_) {
+    return null;
+  }
+});
